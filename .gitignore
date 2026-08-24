@@ -1,0 +1,79 @@
+# Dependencies
+node_modules/
+
+# VS Code Local History extension — contains copies of .env files with REAL SECRETS
+.history/
+
+# ============================================================
+# ENVIRONMENT VARIABLES — NEVER commit these.
+# They contain API keys, payment secrets, and DB credentials.
+# Render/Vercel read env vars from their DASHBOARDS, not from files,
+# so committing them is unnecessary AND dangerous.
+# ============================================================
+.env
+.env.*
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+**/.env
+!.env.example
+
+# ============================================================
+# BUILD OUTPUTS — Render/Vercel build these themselves.
+# Committing them causes deploy conflicts & stale-build errors.
+# ============================================================
+.next/
+dist/
+build/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================================
+# CACHES — cause "works on my machine" build failures
+# ============================================================
+.cache/
+.eslintcache
+.turbo/
+.parcel-cache/
+
+# ============================================================
+# UPLOADS / RUNTIME DATA — backend file uploads belong in storage
+# (Supabase Storage / R2), never in the repo. Large files break deploys.
+# ============================================================
+uploads/
+backend/uploads/
+tmp/
+temp/
+*.tmp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.pem
+*.key
+secrets/
+
+# Private docs — internal business plans & deployment details
+idea.md
+DEPLOYMENT.md

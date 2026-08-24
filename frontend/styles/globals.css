@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Base ---------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-white text-ink-900 antialiased;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+::selection {
+  background: rgba(5, 150, 105, 0.14);
+}
+
+/* ---------- Design system ---------- */
+@layer components {
+  /* Section heading */
+  .h-display {
+    @apply font-sans font-semibold tracking-tight text-ink-900;
+    letter-spacing: -0.02em;
+  }
+
+  /* Card — flat surface, single border + hairline shadow */
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+  }
+
+  /* Primary button — solid accent */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Secondary button — outlined */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* Text link button */
+  .btn-link {
+    @apply inline-flex items-center gap-1.5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-700 focus:outline-none;
+  }
+
+  /* Input */
+  .input-base {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors duration-150 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  /* Eyebrow label */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-widest text-brand-600;
+  }
+
+  /* Badge / chip */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-ink-700;
+  }
+
+  .chip-accent {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-100 bg-brand-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700;
+  }
+
+  .chip-success {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700;
+  }
+
+  .chip-warning {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700;
+  }
+
+  /* Divider */
+  .divider {
+    @apply h-px w-full bg-gray-200;
+  }
+
+  /* ---- Legacy aliases (older pages) mapped to the new system ---- */
+  .glass-card,
+  .quiet-card {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm;
+  }
+  .glass-hover {
+    @apply rounded-lg border border-gray-200 bg-white shadow-sm transition-colors duration-150 hover:border-gray-300;
+  }
+  .input-min {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors duration-150 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:bg-gray-50 focus:outline-none disabled:opacity-50;
+  }
+  .heading-serif {
+    @apply font-sans font-semibold tracking-tight text-ink-900;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .shadow-soft {
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.05);
+  }
+  .shadow-lift {
+    box-shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
+  }
+}
+
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
