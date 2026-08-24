@@ -309,7 +309,7 @@ export default function Home() {
           <div className="space-y-3 sm:space-y-4">
             {[
               ['whatsapp', 'notion', 'trello', 'stripe', 'gmail', 'googledrive', 'calcom', 'zapier'],
-              ['asana', 'mailchimp', 'hubspot', 'zoho', 'googlemeet', 'clickup', 'shopify', 'slack'],
+              ['asana', 'mailchimp', 'hubspot', 'zoho', 'googlemeet', 'clickup', 'shopify', 'discord'],
             ].map((row, rowIdx) => (
               <div key={rowIdx} className="flex flex-wrap justify-center gap-3 sm:gap-4">
                 {row.map((slug) => (
