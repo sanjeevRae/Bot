@@ -57,16 +57,24 @@ export default function Channels() {
 
       {/* Setup guide */}
       <div className="card mb-5 p-6">
-        <h2 className="mb-2 text-sm font-semibold text-ink-900">One-time Meta setup</h2>
-        <ol className="list-inside list-decimal space-y-1.5 text-[13px] leading-relaxed text-ink-500">
-          <li>Create a free app at <span className="font-medium text-ink-700">developers.facebook.com</span> and add the <em>WhatsApp</em> and/or <em>Messenger</em> product.</li>
-          <li>In webhook settings, point the callback URL to:</li>
-        </ol>
-        <pre className="my-3 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-ink-700">{webhookUrl}</pre>
-        <ol start={3} className="list-inside list-decimal space-y-1.5 text-[13px] leading-relaxed text-ink-500">
-          <li>Set a verify token — use the same value as <code className="rounded bg-gray-100 px-1 font-mono text-[11px]">META_VERIFY_TOKEN</code> in your backend env.</li>
-          <li>Subscribe to the <code className="rounded bg-gray-100 px-1 font-mono text-[11px]">messages</code> field, then paste your Phone Number ID / Page ID below.</li>
-        </ol>
+        <h2 className="mb-2 text-sm font-semibold text-ink-900">Connecting WhatsApp</h2>
+        <p className="text-[13px] leading-relaxed text-ink-500">
+          Our team connects WhatsApp for you during onboarding — no technical work needed.
+          Once connected, customers can message your business number and your bot replies instantly.
+        </p>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs font-medium text-brand-600">
+            Technical setup details (for admins)
+          </summary>
+          <ol className="list-inside list-decimal mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-500">
+            <li>In your Meta app webhook settings, set the callback URL:</li>
+          </ol>
+          <pre className="my-2 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-ink-700">{webhookUrl}</pre>
+          <ol start={2} className="list-inside list-decimal space-y-1.5 text-[13px] leading-relaxed text-ink-500">
+            <li>Verify token = <code className="rounded bg-gray-100 px-1 font-mono text-[11px]">META_VERIFY_TOKEN</code> from Render env.</li>
+            <li>Subscribe to the <code className="rounded bg-gray-100 px-1 font-mono text-[11px]">messages</code> field, then paste the Phone Number ID below.</li>
+          </ol>
+        </details>
       </div>
 
       {/* WhatsApp */}
