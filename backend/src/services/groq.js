@@ -99,13 +99,25 @@ async function callChatCompletion(messages, tools) {
 
 /**
  * Build the system prompt for the business bot.
+ * @param {object} org - organization row
+ * @param {object} settings - settings row
+ * @param {Array} contextChunks - retrieved knowledge chunks
+ * @param {string} channel - 'web' | 'whatsapp' | 'messenger' | 'instagram'
  */
-function buildSystemPrompt(org, settings, contextChunks) {
+function buildSystemPrompt(org, settings, contextChunks, channel = 'web') {
   const context = contextChunks.length
     ? `\n\nRelevant knowledge about this business (use it to answer; if unsure, say you don't know):\n${contextChunks
         .map((c, i) => `[${i + 1}] ${c.content}`)
         .join('\n\n')}`
     : '';
+
+  // Messaging apps render plain text only — no markdown tables/bold/headers.
+  const formatRule =
+    channel === 'web'
+      ? '- You may use light markdown (bold, lists) since the web widget renders it.'
+      : `- You are chatting on ${channel}. Output PLAIN TEXT ONLY: no markdown, no **bold**, no # headings, no tables, no code blocks.
+- Keep replies short (under 150 words). For lists, use simple dashes or numbered lines like "1." with line breaks.
+- Use emojis sparingly where friendly.`;
 
   return `You are "${settings?.bot_name || 'Chitra'}", the friendly AI assistant for the business "${org.name}"${
     org.industry ? ` (industry: ${org.industry})` : ''
@@ -114,6 +126,7 @@ function buildSystemPrompt(org, settings, contextChunks) {
 Rules:
 - Answer questions about this business using ONLY the provided knowledge. If the answer isn't in the knowledge, say so honestly and offer to take their contact info.
 - Be concise, warm and helpful. Match the customer's language.
+${formatRule}
 - You can book appointments/reservations using your tools. Always confirm details (date, time, party size / service) before calling create_booking.
 - If a visitor shares their name + email/phone without asking to book, save them as a lead with create_lead.
 - If the visitor asks for a human, or you cannot help and it seems urgent, use request_human and tell them a team member will follow up.
