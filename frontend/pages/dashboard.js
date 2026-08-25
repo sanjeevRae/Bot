@@ -4,7 +4,7 @@ import { api } from '../lib/supabaseClient';
 /**
  * Minimal markdown → JSX renderer for bot replies.
  * Supports: **bold**, *italic*, `code`, - bullets, 1. numbered lists,
- * ### headings, and [links](url). Everything else renders as plain text.
+ * ### headings, tables (| a | b |), and [links](url).
  */
 function renderMarkdown(text) {
   const inline = (s) => {
@@ -28,43 +28,98 @@ function renderMarkdown(text) {
     return parts;
   };
 
+  // Split table rows out first: | a | b | c |
+  const isTableRow = (l) => /^\s*\|.*\|\s*$/.test(l);
+  const parseRow = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+
   const lines = text.split('\n');
   const blocks = [];
   let list = [];
+  let ordered = false;
+  let table = null; // { header: [], rows: [][] }
 
   const flushList = () => {
-    if (list.length) {
-      blocks.push(
-        <ul key={`ul-${blocks.length}`} className="my-1 space-y-1 pl-1">
-          {list.map((item, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-50" />
-              <span>{inline(item)}</span>
-            </li>
-          ))}
-        </ul>
-      );
-      list = [];
-    }
+    if (!list.length) return;
+    const items = list.map((item, i) => (
+      <li key={i} className="flex gap-2">
+        {ordered
+          ? <span className="shrink-0 font-semibold text-brand-600">{i + 1}.</span>
+          : <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-50" />}
+        <span>{inline(item)}</span>
+      </li>
+    ));
+    blocks.push(
+      ordered
+        ? <ol key={`ol-${blocks.length}`} className="my-1 space-y-1">{items}</ol>
+        : <ul key={`ul-${blocks.length}`} className="my-1 space-y-1">{items}</ul>
+    );
+    list = [];
+  };
+
+  const flushTable = () => {
+    if (!table) return;
+    blocks.push(
+      <div key={`tb-${blocks.length}`} className="my-2 overflow-x-auto rounded-lg border border-gray-200">
+        <table className="w-full text-left text-[12px]">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              {table.header.map((h, i) => (
+                <th key={i} className="px-2.5 py-1.5 font-semibold text-ink-900">{inline(h)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {table.rows.map((row, r) => (
+              <tr key={r}>
+                {row.map((cell, i) => (
+                  <td key={i} className="px-2.5 py-1.5 align-top text-ink-700">{inline(cell)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+    table = null;
   };
 
   for (const line of lines) {
+    // Table handling
+    if (isTableRow(line)) {
+      const cells = parseRow(line);
+      // separator row like |---|---| → skip
+      if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
+      if (!table) table = { header: cells, rows: [] };
+      else table.rows.push(cells);
+      continue;
+    }
+    flushTable();
+
     const bullet = line.match(/^\s*[-•*]\s+(.*)/);
     const numbered = line.match(/^\s*\d+[.)]\s+(.*)/);
-    const heading = line.match(/^#{1,6}\s+(.*)/);
+    const heading = line.match(/^(#{1,6})\s+(.*)/);
 
     if (bullet || numbered) {
+      const isOrdered = !!numbered;
+      if (list.length && ordered !== isOrdered) flushList();
+      ordered = isOrdered;
       list.push((bullet || numbered)[1]);
     } else {
       flushList();
       if (heading) {
-        blocks.push(<p key={blocks.length} className="mt-1 font-semibold">{inline(heading[1])}</p>);
+        const level = heading[1].length;
+        blocks.push(
+          <p key={blocks.length} className={`mt-1 font-semibold ${level <= 2 ? 'text-[15px]' : 'text-sm'}`}>
+            {inline(heading[2])}
+          </p>
+        );
       } else if (line.trim()) {
         blocks.push(<p key={blocks.length} className="min-h-[1em]">{inline(line)}</p>);
       }
     }
   }
   flushList();
+  flushTable();
   return blocks;
 }
 
@@ -152,10 +207,10 @@ function TestChat({ orgId }) {
       </div>
       <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {messages.map((m, i) => (
-          <div key={i} className={`max-w-[85%] space-y-1 px-3.5 py-2.5 text-sm leading-relaxed ${
+          <div key={i} className={`space-y-1 px-3.5 py-2.5 text-sm leading-relaxed ${
             m.who === 'user'
-              ? 'self-end rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-lift'
-              : 'self-start rounded-2xl rounded-bl-md border border-white/80 bg-white/80 text-ink-900 backdrop-blur'
+              ? 'max-w-[85%] self-end rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-lift'
+              : 'max-w-[95%] self-start rounded-2xl rounded-bl-md border border-white/80 bg-white/80 text-ink-900 backdrop-blur'
           }`}>
             {m.who === 'bot' ? renderMarkdown(m.text) : <span className="whitespace-pre-wrap">{m.text}</span>}
           </div>
