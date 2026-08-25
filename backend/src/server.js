@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const fileUpload = require('express-fileupload');
@@ -40,6 +41,9 @@ app.use('/api/admin', require('./routes/admin'));
 
 // Widget loader + hosted bot page (public)
 app.use('/', require('./routes/widget'));
+
+// Static brand assets (logo used by client-side widgets)
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // 404
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
