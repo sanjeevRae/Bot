@@ -106,7 +106,7 @@ export default function Home() {
       <img
         src="https://res.cloudinary.com/dngbvnleh/image/upload/v1787640706/Your_paragraph_text_elscbq.png"
         alt="Chitra AI assistant"
-        className="block w-full border-y border-gray-200 bg-gray-50"
+        className="block w-full"
       />
 
       {/* Features */}
