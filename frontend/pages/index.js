@@ -81,7 +81,7 @@ export default function Home() {
   return (
     <main>
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-5 pb-14 pt-20 text-center sm:px-6 sm:pb-20 sm:pt-28">
+      <section className="mx-auto max-w-6xl px-4 pb-10 pt-12 text-center sm:px-6 sm:pb-10 sm:pt-12">
         <span className="chip mb-6">Free trial · No credit card required</span>
         <h1 className="h-display mx-auto mb-5 max-w-3xl text-4xl leading-[1.1] sm:text-5xl md:text-[56px]">
           AI Assistant That Sells,
