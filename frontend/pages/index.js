@@ -104,7 +104,7 @@ export default function Home() {
 
       {/* Hero image */}
       <img
-        src="https://res.cloudinary.com/dngbvnleh/image/upload/v1787512677/Untitled_design_2_emg4is.png"
+        src="https://res.cloudinary.com/dngbvnleh/image/upload/v1787640706/Your_paragraph_text_elscbq.png"
         alt="Chitra AI assistant"
         className="block w-full border-y border-gray-200 bg-gray-50"
       />
