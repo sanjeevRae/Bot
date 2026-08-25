@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import DemoWidget from '../components/DemoWidget';
 
 /* Inline SVG icon set (Lucide-style strokes) */
 const Icon = ({ children }) => (
@@ -78,6 +79,8 @@ function SectionHeader({ eyebrow, title, text, dark = false }) {
 }
 
 export default function Home() {
+  const demoOrgId = process.env.NEXT_PUBLIC_DEMO_ORG_ID;
+
   return (
     <main>
       {/* Hero */}
@@ -448,6 +451,7 @@ export default function Home() {
           </div>
         </div>
       </footer>
+      {demoOrgId && <DemoWidget orgId={demoOrgId} />}
     </main>
   );
 }
