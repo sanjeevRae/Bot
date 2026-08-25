@@ -1,6 +1,73 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/supabaseClient';
 
+/**
+ * Minimal markdown → JSX renderer for bot replies.
+ * Supports: **bold**, *italic*, `code`, - bullets, 1. numbered lists,
+ * ### headings, and [links](url). Everything else renders as plain text.
+ */
+function renderMarkdown(text) {
+  const inline = (s) => {
+    const parts = [];
+    let rest = s;
+    const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/;
+    while (rest) {
+      const m = rest.match(pattern);
+      if (!m) { parts.push(rest); break; }
+      if (m.index > 0) parts.push(rest.slice(0, m.index));
+      const tok = m[0];
+      if (tok.startsWith('**')) parts.push(<strong key={parts.length} className="font-semibold">{tok.slice(2, -2)}</strong>);
+      else if (tok.startsWith('*')) parts.push(<em key={parts.length}>{tok.slice(1, -1)}</em>);
+      else if (tok.startsWith('`')) parts.push(<code key={parts.length} className="rounded bg-gray-100 px-1 py-0.5 font-mono text-[12px]">{tok.slice(1, -1)}</code>);
+      else {
+        const lm = tok.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        parts.push(<a key={parts.length} href={lm[2]} target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">{lm[1]}</a>);
+      }
+      rest = rest.slice(m.index + tok.length);
+    }
+    return parts;
+  };
+
+  const lines = text.split('\n');
+  const blocks = [];
+  let list = [];
+
+  const flushList = () => {
+    if (list.length) {
+      blocks.push(
+        <ul key={`ul-${blocks.length}`} className="my-1 space-y-1 pl-1">
+          {list.map((item, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-current opacity-50" />
+              <span>{inline(item)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      list = [];
+    }
+  };
+
+  for (const line of lines) {
+    const bullet = line.match(/^\s*[-•*]\s+(.*)/);
+    const numbered = line.match(/^\s*\d+[.)]\s+(.*)/);
+    const heading = line.match(/^#{1,6}\s+(.*)/);
+
+    if (bullet || numbered) {
+      list.push((bullet || numbered)[1]);
+    } else {
+      flushList();
+      if (heading) {
+        blocks.push(<p key={blocks.length} className="mt-1 font-semibold">{inline(heading[1])}</p>);
+      } else if (line.trim()) {
+        blocks.push(<p key={blocks.length} className="min-h-[1em]">{inline(line)}</p>);
+      }
+    }
+  }
+  flushList();
+  return blocks;
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -85,11 +152,13 @@ function TestChat({ orgId }) {
       </div>
       <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
         {messages.map((m, i) => (
-          <div key={i} className={`max-w-[85%] whitespace-pre-wrap px-3.5 py-2.5 text-sm ${
+          <div key={i} className={`max-w-[85%] space-y-1 px-3.5 py-2.5 text-sm leading-relaxed ${
             m.who === 'user'
               ? 'self-end rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-lift'
               : 'self-start rounded-2xl rounded-bl-md border border-white/80 bg-white/80 text-ink-900 backdrop-blur'
-          }`}>{m.text}</div>
+          }`}>
+            {m.who === 'bot' ? renderMarkdown(m.text) : <span className="whitespace-pre-wrap">{m.text}</span>}
+          </div>
         ))}
         {busy && (
           <div className="flex items-center gap-1.5 self-start rounded-2xl border border-white/80 bg-white/80 px-4 py-3 backdrop-blur">
