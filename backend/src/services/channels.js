@@ -14,6 +14,25 @@ const config = require('../config');
 
 // ---------- Outbound sending ----------
 
+/**
+ * Strip markdown that messaging apps render as raw symbols
+ * (tables, **bold**, # headings, code fences, links).
+ */
+function plainText(text) {
+  return text
+    .replace(/\|\|/g, ' ')                       // table cell pipes
+    .replace(/^\s*\|.*\|\s*$/gm, '')            // leftover table rows
+    .replace(/^#{1,6}\s+/gm, '')                // headings
+    .replace(/\*\*(.+?)\*\*/g, '$1')            // bold
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')                // italic
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')      // inline/blocked code
+    .replace(/\[(.+?)\]\((.+?)\)/g, '$1 ($2)')  // links → "text (url)"
+    .replace(/^\s*[-*]{3,}\s*$/gm, '')          // horizontal rules
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function sendWhatsApp(phoneNumberId, to, text) {
   const token = config.whatsapp.token;
   if (!token || !phoneNumberId) throw new Error('WhatsApp not configured');
@@ -29,7 +48,7 @@ async function sendWhatsApp(phoneNumberId, to, text) {
         messaging_product: 'whatsapp',
         to,
         type: 'text',
-        text: { body: text.slice(0, 4096) },
+        text: { body: plainText(text).slice(0, 4096) },
       }),
       signal: AbortSignal.timeout(10000),
     }
@@ -54,7 +73,7 @@ async function sendMessenger(pageId, recipientId, text) {
       },
       body: JSON.stringify({
         recipient: { id: recipientId },
-        message: { text: text.slice(0, 2000) },
+        message: { text: plainText(text).slice(0, 2000) },
       }),
       signal: AbortSignal.timeout(10000),
     }

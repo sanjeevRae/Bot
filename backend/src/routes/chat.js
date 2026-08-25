@@ -90,7 +90,7 @@ router.post('/', async (req, res) => {
 
     // ---- LLM turn with tools ----
     const messages = [
-      { role: 'system', content: buildSystemPrompt(org, settings, contextChunks) },
+      { role: 'system', content: buildSystemPrompt(org, settings, contextChunks, channel) },
       ...priorMessages,
       { role: 'user', content: message },
     ];

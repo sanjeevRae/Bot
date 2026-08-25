@@ -145,7 +145,7 @@ async function runChatForChannel(orgId, sessionId, message, channel) {
 
   const result = await runChatTurn({
     messages: [
-      { role: 'system', content: buildSystemPrompt(org, settings, contextChunks) },
+      { role: 'system', content: buildSystemPrompt(org, settings, contextChunks, channel) },
       ...priorMessages,
       { role: 'user', content: message },
     ],
