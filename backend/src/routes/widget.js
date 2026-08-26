@@ -112,9 +112,75 @@ router.get('/widget.js', async (req, res) => {
   function addMsg(text, who){
     var d=document.createElement('div');
     d.className='chitra-msg '+who;
-    d.textContent=text;
+    if(who==='bot'){ renderMd(d, text); } else { d.textContent=text; }
     msgs.appendChild(d);
     msgs.scrollTop=msgs.scrollHeight;
+  }
+
+  /* Mini markdown renderer: tables, bold, italic, code, links, lists, headings */
+  function esc(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function inline(s){
+    return esc(s)
+      .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>')
+      .replace(new RegExp('\x60([^\x60]+)\x60','g'),'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>');
+  }
+  function renderMd(container, text){
+    var lines=String(text).split('\\n');
+    var html='', list=[], ordered=false, table=null;
+
+    function flushList(){
+      if(!list.length) return;
+      var items=list.map(function(it){return '<li style="margin:2px 0">'+inline(it)+'</li>';}).join('');
+      html += ordered
+        ? '<ol style="margin:4px 0;padding-left:20px">'+items+'</ol>'
+        : '<ul style="margin:4px 0;padding-left:20px">'+items+'</ul>';
+      list=[];
+    }
+    function flushTable(){
+      if(!table) return;
+      var head='<tr>'+table.header.map(function(c){return '<th style="text-align:left;padding:5px 8px;background:#f9fafb;font-weight:600">'+inline(c)+'</th>';}).join('')+'</tr>';
+      var rows=table.rows.map(function(r){
+        return '<tr>'+r.map(function(c){return '<td style="padding:5px 8px;border-top:1px solid #f0f0f0;vertical-align:top">'+inline(c)+'</td>';}).join('')+'</tr>';
+      }).join('');
+      html+='<div style="overflow-x:auto;margin:6px 0"><table style="border-collapse:collapse;width:100%;font-size:12px;border:1px solid #eee;border-radius:6px">'+head+rows+'</table></div>';
+      table=null;
+    }
+
+    for(var i=0;i<lines.length;i++){
+      var line=lines[i];
+      var tr=line.match(/^\\s*\\|(.+)\\|\\s*$/);
+      if(tr){
+        var cells=tr[1].split('|').map(function(c){return c.trim();});
+        if(cells.every(function(c){return /^:?-{2,}:?$/.test(c);})) continue;
+        if(!table) table={header:cells,rows:[]}; else table.rows.push(cells);
+        continue;
+      }
+      flushTable();
+
+      var h=line.match(/^(#{1,6})\\s+(.*)/);
+      var b=line.match(/^\\s*[-•*]\\s+(.*)/);
+      var n=line.match(/^\\s*(\\d+)[.)]\\s+(.*)/);
+
+      if(h){
+        flushList();
+        html+='<p style="margin:6px 0 2px;font-weight:600">'+inline(h[2])+'</p>';
+      } else if(b||n){
+        var ord=!!n;
+        if(list.length && ordered!==ord) flushList();
+        ordered=ord;
+        list.push(n?n[2]:b[1]);
+      } else if(line.trim()){
+        flushList();
+        html+='<p style="margin:3px 0">'+inline(line)+'</p>';
+      }
+    }
+    flushList();
+    flushTable();
+    container.innerHTML=html || esc(text);
   }
 
   addMsg(WELCOME,'bot');
