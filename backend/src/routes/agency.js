@@ -5,8 +5,11 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
-/** Ensure the caller is on the agency plan and owns a parent org. */
+/** Ensure the caller is an admin OR is on the agency plan and owns a parent org. */
 async function requireAgency(req, res) {
+  // Platform admins have full access regardless of their own org's plan.
+  if (req.role === 'admin') return null;
+
   const { data: org } = await supabaseAdmin
     .from('organizations')
     .select('id, plan, plan_expires_at')
@@ -33,11 +36,16 @@ router.get('/clients', async (req, res) => {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const { data: clients, error } = await supabaseAdmin
+  // Admins see every client workspace across all agencies;
+  // agency users only see their own children.
+  let query = supabaseAdmin
     .from('organizations')
     .select('id, name, industry, plan, plan_expires_at, created_at')
-    .eq('parent_org_id', req.orgId)
     .order('created_at', { ascending: false });
+
+  if (req.role !== 'admin') query = query.eq('parent_org_id', req.orgId);
+
+  const { data: clients, error } = await query;
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -73,6 +81,8 @@ router.post('/clients', async (req, res) => {
     .insert({
       name: name.trim(),
       owner_user_id: req.user.id,
+      // Admins creating clients get attributed to their own org as parent;
+      // regular agency users attribute to theirs.
       parent_org_id: req.orgId,
       plan: 'pro',
       industry: industry || null,
@@ -93,11 +103,14 @@ router.post('/clients', async (req, res) => {
  */
 router.delete('/clients/:id', async (req, res) => {
   if (!(await requireAgency(req, res))) return;
-  const { error } = await supabaseAdmin
+
+  let query = supabaseAdmin
     .from('organizations')
     .delete()
-    .eq('id', req.params.id)
-    .eq('parent_org_id', req.orgId); // ownership guard
+    .eq('id', req.params.id);
+
+  // Admins may delete any client workspace; agencies only their own.
+  if (req.role !== 'admin') query = query.eq('parent_org_id', req.orgId);
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
