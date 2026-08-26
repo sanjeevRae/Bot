@@ -15,6 +15,7 @@ export default function Agency() {
       setClients(d.clients || []);
     } catch (e) {
       setError(e.message);
+      setClients([]); // exit loading state even when the request fails
     }
   }
   useEffect(() => { load(); }, []);
