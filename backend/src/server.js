@@ -24,9 +24,21 @@ const strictCors = cors({
   credentials: true,
   origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
 });
+// Helmet's default Cross-Origin-Resource-Policy: same-origin blocks customer
+// sites from loading widget.js / logo.webp cross-origin. Relax it (and COEP)
+// for the public embeddable resources only.
+const helmetPublic = helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false,
+});
 app.use('/api/chat', publicCors);
 app.use('/widget.js', publicCors);
+app.use('/logo.webp', publicCors);
 app.use('/bot', publicCors);
+app.use('/api/channels/webhook', publicCors);
+app.use('/widget.js', helmetPublic);
+app.use('/logo.webp', helmetPublic);
+app.use('/bot', helmetPublic);
 app.use('/api/channels/webhook', publicCors);
 app.use(strictCors); // strict allowlist for everything else
 
