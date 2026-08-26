@@ -19,6 +19,7 @@ export default function Admin() {
   const [editing, setEditing] = useState(null); // tenant id being edited
   const [quotaInput, setQuotaInput] = useState('');
   const [saving, setSaving] = useState(false);
+  const [planBusy, setPlanBusy] = useState(false);
 
   async function load() {
     try {
@@ -54,6 +55,22 @@ export default function Admin() {
       setError(e.message);
     }
     setSaving(false);
+  }
+
+  async function toggleAgency(tenantId, hasAgency) {
+    if (hasAgency && !confirm('Revoke the Agency plan from this business? It will be downgraded to free.')) return;
+    setPlanBusy(true);
+    setError('');
+    try {
+      await api(`/api/admin/tenants/${tenantId}/${hasAgency ? 'revoke-agency' : 'grant-agency'}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+    setPlanBusy(false);
   }
 
   if (error && !tenants) {
@@ -123,12 +140,13 @@ export default function Admin() {
               <th className="px-5 py-3 font-medium">Owner</th>
               <th className="px-5 py-3 font-medium">Usage / Quota</th>
               <th className="hidden px-5 py-3 font-medium md:table-cell">Docs · Leads · Bookings</th>
+              <th className="px-5 py-3 font-medium">Agency plan</th>
               <th className="px-5 py-3 text-right font-medium">Extend usage</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
-              <tr><td colSpan={5} className="px-5 py-10 text-center text-ink-400">No businesses found.</td></tr>
+              <tr><td colSpan={6} className="px-5 py-10 text-center text-ink-400">No businesses found.</td></tr>
             )}
             {filtered.map((t) => {
               const quota = t.quota ?? 100; // platform default
@@ -161,6 +179,27 @@ export default function Admin() {
                   </td>
                   <td className="hidden px-5 py-3.5 text-xs text-ink-500 md:table-cell">
                     {t.documents} docs · {t.totalLeads} leads · {t.totalBookings} bookings
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {t.plan === 'agency' ? (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                          Agency
+                        </span>
+                        {t.planExpiresAt && (
+                          <span className="text-[11px] text-ink-400">till {String(t.planExpiresAt).slice(0, 10)}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-ink-400">—</span>
+                    )}
+                    <button
+                      onClick={() => toggleAgency(t.id, t.plan === 'agency')}
+                      disabled={planBusy}
+                      className={`mt-1.5 block !px-3 !py-1.5 text-xs ${t.plan === 'agency' ? 'btn-outline' : 'btn-primary'}`}
+                    >
+                      {t.plan === 'agency' ? 'Revoke' : 'Grant Agency'}
+                    </button>
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {editing === t.id ? (

@@ -28,13 +28,13 @@ router.get('/tenants', async (req, res) => {
   let orgs, error;
   ({ data: orgs, error } = await supabaseAdmin
     .from('organizations')
-    .select('id, name, industry, monthly_message_quota, created_at')
+    .select('id, name, industry, monthly_message_quota, plan, plan_expires_at, created_at')
     .order('created_at', { ascending: false }));
 
   if (error && /monthly_message_quota/.test(error.message)) {
     ({ data: orgs, error } = await supabaseAdmin
       .from('organizations')
-      .select('id, name, industry, created_at')
+      .select('id, name, industry, plan, plan_expires_at, created_at')
       .order('created_at', { ascending: false }));
   }
 
@@ -62,6 +62,8 @@ router.get('/tenants', async (req, res) => {
         ownerEmail: profile?.email || null,
         createdAt: org.created_at,
         quota: org.monthly_message_quota ?? null, // null = platform default
+        plan: org.plan || 'free',
+        planExpiresAt: org.plan_expires_at || null,
         messagesThisMonth: messages.count || 0,
         totalBookings: bookings.count || 0,
         totalLeads: leads.count || 0,
@@ -99,6 +101,83 @@ router.patch('/tenants/:id/quota', async (req, res) => {
     }
     return res.status(500).json({ error: error.message });
   }
+  res.json({ tenant: data });
+});
+
+/**
+ * GET /api/admin/agency-clients
+ * All client workspaces (orgs that have a parent agency), with usage summary.
+ */
+router.get('/agency-clients', async (req, res) => {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const { data: clients, error } = await supabaseAdmin
+    .from('organizations')
+    .select('id, name, industry, plan, plan_expires_at, parent_org_id, created_at, organizations:parent_org_id(name)')
+    .not('parent_org_id', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const enriched = await Promise.all(
+    (clients || []).map(async (c) => {
+      const [{ count: messages }, { count: bookings }, { count: leads }] = await Promise.all([
+        supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
+          .eq('organization_id', c.id).eq('event_type', 'message').gte('created_at', monthStart.toISOString()),
+        supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
+          .eq('organization_id', c.id).eq('event_type', 'booking').gte('created_at', monthStart.toISOString()),
+        supabaseAdmin.from('leads').select('id', { count: 'exact', head: true })
+          .eq('organization_id', c.id),
+      ]);
+      return {
+        ...c,
+        agencyName: c.organizations?.name || null,
+        messagesThisMonth: messages || 0,
+        bookingsThisMonth: bookings || 0,
+        totalLeads: leads || 0,
+      };
+    })
+  );
+
+  res.json({ clients: enriched });
+});
+
+/**
+ * POST /api/admin/tenants/:id/grant-agency
+ * Grant the Agency plan to any organization.
+ * Body: { months?: number } — defaults to 12 months.
+ */
+router.post('/tenants/:id/grant-agency', async (req, res) => {
+  const months = Number.isInteger(req.body.months) && req.body.months > 0 ? req.body.months : 12;
+  const expires = new Date();
+  expires.setMonth(expires.getMonth() + months);
+
+  const { data, error } = await supabaseAdmin
+    .from('organizations')
+    .update({ plan: 'agency', plan_expires_at: expires.toISOString() })
+    .eq('id', req.params.id)
+    .select('id, name, plan, plan_expires_at')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ tenant: data });
+});
+
+/**
+ * POST /api/admin/tenants/:id/revoke-agency
+ * Revoke the Agency plan — downgrades the org back to free.
+ */
+router.post('/tenants/:id/revoke-agency', async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('organizations')
+    .update({ plan: 'free', plan_expires_at: null })
+    .eq('id', req.params.id)
+    .select('id, name, plan, plan_expires_at')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
   res.json({ tenant: data });
 });
 
