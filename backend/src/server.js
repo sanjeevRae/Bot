@@ -15,13 +15,20 @@ app.use(helmet());
 app.use(express.json({ limit: '2mb' }));
 app.use(fileUpload({ limits: { fileSize: 6 * 1024 * 1024 } }));
 
-// CORS — allow dashboard frontend + customer sites (widget)
-app.use(
-  cors({
-    origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
-    credentials: true,
-  })
-);
+// CORS policy:
+//  - Public/widget endpoints (/api/chat, /widget.js, /bot/*, /api/channels/webhook)
+//    are embeddable on ANY customer website → allow all origins there.
+//  - Authenticated dashboard endpoints keep the strict CORS_ORIGINS allowlist.
+const publicCors = cors({ origin: true, credentials: false }); // reflect any origin
+const strictCors = cors({
+  credentials: true,
+  origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
+});
+app.use('/api/chat', publicCors);
+app.use('/widget.js', publicCors);
+app.use('/bot', publicCors);
+app.use('/api/channels/webhook', publicCors);
+app.use(strictCors); // strict allowlist for everything else
 
 // ---------- Routes ----------
 app.get('/health', (req, res) => res.json({ ok: true, service: 'chitra-ai-backend', time: new Date().toISOString() }));
