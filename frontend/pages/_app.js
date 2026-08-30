@@ -10,17 +10,33 @@ export default function App({ Component, pageProps }) {
   const [role, setRole] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user || null);
-      if (data.session) fetchRole(data.session.access_token);
-      setLoading(false);
-    });
+    let settled = false;
+    const finish = () => {
+      if (!settled) {
+        settled = true;
+        setLoading(false);
+      }
+    };
+    // Safety net: never leave the whole app stuck on the loading screen,
+    // even if the stored session/localStorage is corrupted.
+    const failsafe = setTimeout(finish, 10000);
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        setUser(data.session?.user || null);
+        if (data.session) fetchRole(data.session.access_token);
+        finish();
+      })
+      .catch(() => finish());
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user || null);
       setRole(null);
       if (session) fetchRole(session.access_token);
     });
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      clearTimeout(failsafe);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   async function fetchRole(token) {

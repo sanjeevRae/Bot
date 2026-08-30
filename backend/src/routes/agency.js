@@ -5,10 +5,13 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
-/** Ensure the caller is an admin OR is on the agency plan and owns a parent org. */
-async function requireAgency(req, res) {
+/**
+ * Ensure the caller is an admin OR is on an active agency plan.
+ * Express middleware: calls next() when allowed, otherwise responds 403.
+ */
+async function requireAgency(req, res, next) {
   // Platform admins have full access regardless of their own org's plan.
-  if (req.role === 'admin') return null;
+  if (req.role === 'admin') return next();
 
   const { data: org } = await supabaseAdmin
     .from('organizations')
@@ -20,18 +23,18 @@ async function requireAgency(req, res) {
     && (!org.plan_expires_at || new Date(org.plan_expires_at) > new Date());
 
   if (!active) {
-    res.status(403).json({ error: 'Agency plan required. Upgrade at /billing.' });
-    return null;
+    return res.status(403).json({ error: 'Agency plan required. Upgrade at /billing.' });
   }
-  return org;
+  next();
 }
 
 /**
  * GET /api/agency/clients — list client orgs with usage summary.
  */
-router.get('/clients', async (req, res) => {
-  if (!(await requireAgency(req, res))) return;
-
+router.get('/clients', requireAgency, async (req, res) => {
+  const trace = (m) => { try { require('fs').appendFileSync(require('path').join(require('os').tmpdir(), 'chitra-requests.log'), `[${new Date().toISOString()}] HANDLER /clients: ${m}\n`); } catch {} };
+  trace(`start role=${req.role} org=${req.orgId}`);
+  trace('requireAgency passed');
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -46,6 +49,7 @@ router.get('/clients', async (req, res) => {
   if (req.role !== 'admin') query = query.eq('parent_org_id', req.orgId);
 
   const { data: clients, error } = await query;
+  trace(`orgs fetched: ${(clients || []).length}, error=${error ? error.message : 'none'}`);
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -64,6 +68,7 @@ router.get('/clients', async (req, res) => {
     })
   );
 
+  trace(`responding with ${(enriched || []).length} clients`);
   res.json({ clients: enriched });
 });
 
@@ -71,8 +76,7 @@ router.get('/clients', async (req, res) => {
  * POST /api/agency/clients — create a client workspace.
  * Body: { name, industry? }
  */
-router.post('/clients', async (req, res) => {
-  if (!(await requireAgency(req, res))) return;
+router.post('/clients', requireAgency, async (req, res) => {
   const { name, industry } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Client name is required' });
 
@@ -101,9 +105,7 @@ router.post('/clients', async (req, res) => {
 /**
  * DELETE /api/agency/clients/:id — remove a client workspace.
  */
-router.delete('/clients/:id', async (req, res) => {
-  if (!(await requireAgency(req, res))) return;
-
+router.delete('/clients/:id', requireAgency, async (req, res) => {
   let query = supabaseAdmin
     .from('organizations')
     .delete()
