@@ -1,6 +1,6 @@
 import '../styles/globals.css';
 import { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, fetchApi } from '../lib/supabaseClient';
 import Link from 'next/link';
 import PostHog from '../components/PostHog';
 
@@ -25,7 +25,7 @@ export default function App({ Component, pageProps }) {
 
   async function fetchRole(token) {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/org/me`, {
+      const res = await fetchApi('/api/org/me', {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

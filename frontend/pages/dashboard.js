@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../lib/supabaseClient';
+import { api, fetchApi } from '../lib/supabaseClient';
 
 /**
  * Minimal markdown → JSX renderer for bot replies.
@@ -182,7 +182,7 @@ function TestChat({ orgId }) {
     setMessages((m) => [...m, { who: 'user', text }]);
     setBusy(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/chat`, {
+      const res = await fetchApi('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ orgId, sessionId: 'dashboard-test', message: text }),

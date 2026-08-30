@@ -20,9 +20,15 @@ app.use(fileUpload({ limits: { fileSize: 6 * 1024 * 1024 } }));
 //    are embeddable on ANY customer website → allow all origins there.
 //  - Authenticated dashboard endpoints keep the strict CORS_ORIGINS allowlist.
 const publicCors = cors({ origin: true, credentials: false }); // reflect any origin
+// Support wildcard entries like "https://*.vercel.app" alongside exact origins.
+const corsOriginMatchers = config.corsOrigins.map((o) =>
+  o.includes('*')
+    ? new RegExp(`^${o.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i')
+    : o
+);
 const strictCors = cors({
   credentials: true,
-  origin: config.corsOrigins.includes('*') ? true : config.corsOrigins,
+  origin: config.corsOrigins.includes('*') ? true : corsOriginMatchers,
 });
 // Helmet's default Cross-Origin-Resource-Policy: same-origin blocks customer
 // sites from loading widget.js / logo.webp cross-origin. Relax it (and COEP)

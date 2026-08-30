@@ -71,8 +71,19 @@ npm run dev                 # http://localhost:3000
 | Database | **Supabase** | — | Free tier: 500MB, 50k MAU |
 
 After deploying:
-- Set backend `CORS_ORIGINS=https://your-app.vercel.app`
+- Set backend `CORS_ORIGINS` to include your Vercel URL(s) **and** local dev:
+  `https://your-app.vercel.app,https://*.vercel.app,http://localhost:3000,http://127.0.0.1:3000`
 - Set backend `PUBLIC_BACKEND_URL=https://your-api.onrender.com`
+
+### Two-way failover (local ⇄ Render)
+The frontend calls `NEXT_PUBLIC_API_URL` first and automatically falls back to
+`NEXT_PUBLIC_API_FALLBACK_URL` when the primary is unreachable — closed, asleep,
+502/503/504, or hanging >20s (tunable via `NEXT_PUBLIC_API_TIMEOUT_MS`).
+- Local dev: primary `http://localhost:5000`, fallback `https://your-api.onrender.com`
+- Deployed (Vercel): primary `https://your-api.onrender.com`, optional fallback `http://localhost:5000`
+
+Both backends must allow the frontend origin(s) in their `CORS_ORIGINS` for the
+fallback to work cross-origin.
 
 ## Free-tier stack (no credit card anywhere)
 - **Groq** — LLM (~14k requests/day free)

@@ -112,6 +112,7 @@ router.delete('/clients/:id', async (req, res) => {
   // Admins may delete any client workspace; agencies only their own.
   if (req.role !== 'admin') query = query.eq('parent_org_id', req.orgId);
 
+  const { error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
