@@ -15,4 +15,4 @@ The chat widget now appears on every page of the site.
 | Field | Description |
 |---|---|
 | Org ID | Your Chitra organization ID (Dashboard → Install on your site) |
-| API URL | Your Chitra backend URL. Default: `https://api.chitratech.com.np` |
+| API URL | Your Chitra backend URL. Default: `https://chitra-ai-backend-p6ex.onrender.com` |

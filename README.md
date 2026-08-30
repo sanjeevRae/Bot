@@ -99,4 +99,8 @@ fallback to work cross-origin.
 ✅ V4: eSewa/Khalti payments (Pro Rs.1,500 / Agency Rs.4,500), plan enforcement,
    white-label widget theming, billing page, agency multi-client dashboard,
    PostHog analytics (env-gated)
-🔜 Optional polish: custom domain routing for Pro widgets
+✅ Custom-domain routing for Pro widgets (widget.js resolves org by Host)
+✅ V5: agency "manage as client" org-switching + client login invites (email)
+✅ API failover (local ⇄ Render) + 20s timeout + external keep-alive pinger
+🔜 Todo (ops): run `backend/supabase/migration_v5_agency_invite.sql`; set Render
+   `CORS_ORIGINS`, `KEEP_ALIVE_CRON_URL`; optional `RESEND_API_KEY` for invites

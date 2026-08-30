@@ -38,7 +38,7 @@ class Chitra_AI_Chat {
     public function render_admin_page() {
         if (!current_user_can('manage_options')) return;
         $org_id   = esc_attr(get_option('chitra_org_id'));
-        $api_url  = esc_attr(get_option('chitra_api_url', 'https://api.chitratech.com.np'));
+        $api_url  = esc_attr(get_option('chitra_api_url', 'https://chitra-ai-backend-p6ex.onrender.com'));
         ?>
         <div class="wrap">
             <h1>Chitra AI Chat</h1>
