@@ -33,9 +33,6 @@ async function requireAgency(req, res, next) {
  * GET /api/agency/clients — list client orgs with usage summary.
  */
 router.get('/clients', requireAgency, async (req, res) => {
-  const trace = (m) => { try { require('fs').appendFileSync(require('path').join(require('os').tmpdir(), 'chitra-requests.log'), `[${new Date().toISOString()}] HANDLER /clients: ${m}\n`); } catch {} };
-  trace(`start role=${req.role} org=${req.orgId}`);
-  trace('requireAgency passed');
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -58,7 +55,6 @@ router.get('/clients', requireAgency, async (req, res) => {
     // migration_v5_agency_invite.sql not run yet — fall back gracefully
     ({ data: clients, error } = await runQuery(withoutEmail));
   }
-  trace(`orgs fetched: ${(clients || []).length}, error=${error ? error.message : 'none'}`);
 
   if (error) return res.status(500).json({ error: error.message });
 
@@ -77,7 +73,6 @@ router.get('/clients', requireAgency, async (req, res) => {
     })
   );
 
-  trace(`responding with ${(enriched || []).length} clients`);
   res.json({ clients: enriched });
 });
 
