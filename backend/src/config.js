@@ -76,6 +76,8 @@ const config = {
     enabled: process.env.KEEP_ALIVE !== 'false', // on by default in production
     intervalMs: parseInt(process.env.KEEP_ALIVE_INTERVAL_MS || String(14 * 60 * 1000), 10),
     selfUrl: process.env.PUBLIC_BACKEND_URL || process.env.RENDER_EXTERNAL_URL || '',
+    // External cron pinger URL — see startKeepAlive() for why this matters
+    cronPingUrl: process.env.KEEP_ALIVE_CRON_URL || '',
   },
 
   // Embeddings: local MiniLM via HuggingFace Inference API (free) or fallback hash
