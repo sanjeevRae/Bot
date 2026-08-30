@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, fetchApi } from '../lib/supabaseClient';
+import { useRouter } from 'next/router';
+import { api, fetchApi, getManagingOrg, setManagingOrg } from '../lib/supabaseClient';
 
 /**
  * Minimal markdown → JSX renderer for bot replies.
@@ -124,14 +125,24 @@ function renderMarkdown(text) {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!router.isReady) return;
+    // Agency "Manage as client": /dashboard?org=<client id> switches context
+    const orgParam = router.query.org;
+    if (typeof orgParam === 'string' && orgParam) setManagingOrg({ id: orgParam, name: null });
     api('/api/org/me')
-      .then(setData)
+      .then((d) => {
+        // keep the client's name in the managing banner fresh
+        const managing = getManagingOrg();
+        if (managing?.id === d.org?.id && d.org?.name) setManagingOrg({ id: d.org.id, name: d.org.name });
+        setData(d);
+      })
       .catch((e) => setError(e.message));
-  }, []);
+  }, [router.isReady, router.query.org]);
 
   if (error) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-red-500">{error}</main>;
   if (!data) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-ink-400">Loading dashboard…</main>;

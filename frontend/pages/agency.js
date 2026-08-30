@@ -5,9 +5,12 @@ import { api } from '../lib/supabaseClient';
 export default function Agency() {
   const [clients, setClients] = useState(null);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('');
   const [industry, setIndustry] = useState('');
+  const [email, setEmail] = useState('');
+  const [invite, setInvite] = useState(null); // { id, email }
 
   async function load() {
     try {
@@ -23,10 +26,14 @@ export default function Agency() {
   async function create(e) {
     e.preventDefault();
     if (!name.trim()) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setSuccess('');
     try {
-      await api('/api/agency/clients', { method: 'POST', body: JSON.stringify({ name, industry }) });
-      setName(''); setIndustry('');
+      const d = await api('/api/agency/clients', { method: 'POST', body: JSON.stringify({ name, industry, email: email || undefined }) });
+      setName(''); setIndustry(''); setEmail('');
+      const inviteMsg = d.invite?.sent
+        ? 'Invite email sent to the client.'
+        : d.invite?.error ? `Workspace created, but the invite failed: ${d.invite.error}` : '';
+      setSuccess(`Client workspace "${d.client.name}" created. ${inviteMsg}`.trim());
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -34,9 +41,26 @@ export default function Agency() {
 
   async function remove(id, clientName) {
     if (!confirm(`Delete "${clientName}" and all its data? This cannot be undone.`)) return;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setSuccess('');
     try {
       await api(`/api/agency/clients/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  async function sendInvite(e, id, clientName) {
+    e.preventDefault();
+    const email = invite?.email || '';
+    if (!email.trim()) return;
+    setBusy(true); setError(''); setSuccess('');
+    try {
+      const d = await api(`/api/agency/clients/${id}/invite`, { method: 'POST', body: JSON.stringify({ email }) });
+      if (d.sent && d.mode === 'invite') setSuccess(`Invite email sent to ${email} — they can set up their dashboard.`);
+      else if (d.sent && d.mode === 'magiclink') setSuccess(`Sign-in link emailed to ${email}.`);
+      else if (d.link) setSuccess(`Email not configured — copy this sign-in link for ${clientName}: ${d.link}`);
+      else setSuccess(d.error || 'Invite processed.');
+      setInvite(null);
       await load();
     } catch (e) { setError(e.message); }
     setBusy(false);
@@ -55,6 +79,9 @@ export default function Agency() {
       {error && (
         <div className="mb-6 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
       )}
+      {success && (
+        <div className="mb-6 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>
+      )}
 
       {/* Create client */}
       <form onSubmit={create} className="card mb-8 flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
@@ -67,6 +94,11 @@ export default function Agency() {
           <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Industry (optional)</label>
           <input value={industry} onChange={(e) => setIndustry(e.target.value)}
             placeholder="e.g. Salon / Spa" className="input-base !py-2 text-sm" />
+        </div>
+        <div className="flex-1">
+          <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Client email (optional)</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="owner@bloomsalon.com — sends an invite" className="input-base !py-2 text-sm" />
         </div>
         <button disabled={busy} className="btn-primary !py-2.5 sm:w-auto">Add client</button>
       </form>
@@ -100,26 +132,57 @@ export default function Agency() {
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-ink-900">{c.name}</p>
                     <p className="text-xs text-ink-400">{c.industry || '—'}</p>
+                    <p className="text-xs text-ink-400">{c.contact_email || 'No client login yet'}</p>
                   </td>
                   <td className="px-5 py-3.5 text-ink-700">{c.messagesThisMonth}</td>
                   <td className="px-5 py-3.5 text-ink-700">{c.bookingsThisMonth}</td>
                   <td className="px-5 py-3.5 text-ink-700">{c.totalLeads}</td>
                   <td className="px-5 py-3.5">
                     <Link href={`/dashboard?org=${c.id}`} className="btn-link !text-xs">
-                      Install →
+                      Manage →
                     </Link>
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <button
-                      onClick={() => remove(c.id, c.name)}
-                      disabled={busy}
-                      className="rounded-md px-2 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => setInvite(invite?.id === c.id ? null : { id: c.id, email: c.contact_email || '' })}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-ink-700 transition-colors hover:bg-gray-100"
+                      >
+                        Invite
+                      </button>
+                      <button
+                        onClick={() => remove(c.id, c.name)}
+                        disabled={busy}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
+              {invite && clients.some((c) => c.id === invite.id) && (
+                <tr className="bg-gray-50">
+                  <td colSpan={6} className="px-5 py-3">
+                    <form onSubmit={(e) => sendInvite(e, invite.id, clients.find((c) => c.id === invite.id)?.name)} className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-ink-700">
+                        Invite a login for <strong>{clients.find((c) => c.id === invite.id)?.name}</strong>:
+                      </span>
+                      <input
+                        type="email"
+                        required
+                        autoFocus
+                        value={invite.email}
+                        onChange={(e) => setInvite({ ...invite, email: e.target.value })}
+                        placeholder="owner@clientbusiness.com"
+                        className="input-base !py-1.5 text-sm"
+                      />
+                      <button disabled={busy} className="btn-primary !px-3 !py-1.5 text-xs">Send invite</button>
+                      <button type="button" onClick={() => setInvite(null)} className="rounded-md px-2 py-1 text-xs text-ink-500 hover:bg-gray-100">Cancel</button>
+                    </form>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -127,7 +190,9 @@ export default function Agency() {
 
       <p className="mt-6 text-xs leading-relaxed text-ink-400">
         Each client workspace includes Pro features: white-label widget, custom branding,
-        and 2,000 messages/month. Usage resets monthly.
+        and 2,000 messages/month. Usage resets monthly. Use <strong>Manage</strong> to teach and
+        brand a client's bot as if you were them; use <strong>Invite</strong> to give the client
+        their own dashboard login.
       </p>
     </main>
   );

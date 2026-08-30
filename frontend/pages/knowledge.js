@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, fetchApi } from '../lib/supabaseClient';
+import { api, fetchApi, getManagingOrg } from '../lib/supabaseClient';
 
 /* Inline SVG icons (Lucide-style strokes) */
 const Icon = ({ children }) => (
@@ -60,9 +60,13 @@ export default function Knowledge() {
       const fd = new FormData();
       fd.append('file', file);
       const { data: { session } } = await import('../lib/supabaseClient').then(m => m.supabase.auth.getSession());
+      const managing = getManagingOrg();
       const res = await fetchApi('/api/knowledge/upload', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...(managing?.id ? { 'x-org-id': managing.id } : {}),
+        },
         body: fd,
       });
       const data = await res.json();
