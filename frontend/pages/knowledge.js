@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api } from '../lib/supabaseClient';
+import { api, fetchApi } from '../lib/supabaseClient';
 
 /* Inline SVG icons (Lucide-style strokes) */
 const Icon = ({ children }) => (
@@ -60,7 +60,7 @@ export default function Knowledge() {
       const fd = new FormData();
       fd.append('file', file);
       const { data: { session } } = await import('../lib/supabaseClient').then(m => m.supabase.auth.getSession());
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/knowledge/upload`, {
+      const res = await fetchApi('/api/knowledge/upload', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: fd,
