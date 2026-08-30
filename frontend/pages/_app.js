@@ -1,13 +1,23 @@
 import '../styles/globals.css';
 import { useState, useEffect } from 'react';
-import { supabase, fetchApi } from '../lib/supabaseClient';
+import { supabase, fetchApi, getManagingOrg, setManagingOrg } from '../lib/supabaseClient';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import PostHog from '../components/PostHog';
 
 export default function App({ Component, pageProps }) {
+  const router = useRouter();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState(null);
+  const [managing, setManaging] = useState(null);
+
+  useEffect(() => {
+    const refresh = () => setManaging(getManagingOrg());
+    refresh();
+    window.addEventListener('chitra-managing-changed', refresh);
+    return () => window.removeEventListener('chitra-managing-changed', refresh);
+  }, [router.pathname]);
 
   useEffect(() => {
     let settled = false;
@@ -162,6 +172,22 @@ export default function App({ Component, pageProps }) {
     <div className="min-h-screen">
       <PostHog />
       {nav}
+      {managing?.id && user && (
+        <div className="bg-brand-600 text-white">
+          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5 text-xs sm:px-6">
+            <span>
+              Managing client workspace: <strong>{managing.name || managing.id.slice(0, 8)}</strong>
+              {' '}— changes apply to this client
+            </span>
+            <button
+              onClick={() => { setManagingOrg(null); setManaging(null); router.push('/agency'); }}
+              className="ml-auto rounded bg-white/15 px-2 py-0.5 font-semibold transition-colors hover:bg-white/25"
+            >
+              Exit client
+            </button>
+          </div>
+        </div>
+      )}
       {loading ? (
         <div className="flex h-[80vh] items-center justify-center text-sm text-ink-400">Loading…</div>
       ) : (

@@ -51,15 +51,33 @@ export async function fetchApi(path, options = {}) {
 /** Authenticated fetch helper — attaches Supabase JWT */
 export async function api(path, options = {}) {
   const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetchApi(path, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    ...(options.headers || {}),
+  };
+  // Agency "manage as client": operate on the client workspace
+  const managing = getManagingOrg();
+  if (managing?.id) headers['x-org-id'] = managing.id;
+  const res = await fetchApi(path, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
+}
+
+/* ---------- "Manage as client" (agency org switching) ---------- */
+const MANAGING_KEY = 'chitra-managing-org';
+
+/** Set the client workspace being managed ({ id, name }) or null to stop. */
+export function setManagingOrg(org) {
+  try {
+    if (org && org.id) sessionStorage.setItem(MANAGING_KEY, JSON.stringify(org));
+    else sessionStorage.removeItem(MANAGING_KEY);
+  } catch {}
+  window.dispatchEvent(new Event('chitra-managing-changed'));
+}
+
+/** The client workspace currently being managed, or null. */
+export function getManagingOrg() {
+  try { return JSON.parse(sessionStorage.getItem(MANAGING_KEY) || 'null'); } catch { return null; }
 }

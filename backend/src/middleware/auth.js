@@ -52,6 +52,24 @@ async function requireAuth(req, res, next) {
     req.orgId = profile.organization_id;
     req.role = profile.role || 'owner';
 
+    // Org switch (agency "manage as client"): allow operating on a client
+    // workspace when the caller is a platform admin OR the client org's
+    // parent agency. Disallowed overrides are silently ignored so tenant
+    // isolation is never broken.
+    const override = req.headers['x-org-id'];
+    if (override && override !== profile.organization_id) {
+      const { data: child } = await supabaseAdmin
+        .from('organizations')
+        .select('id, parent_org_id')
+        .eq('id', override)
+        .maybeSingle();
+      const ownsIt = child && (req.role === 'admin' || child.parent_org_id === profile.organization_id);
+      if (ownsIt) {
+        req.orgId = child.id;
+        req.orgSwitched = true;
+      }
+    }
+
     next();
   } catch (err) {
     console.error('Auth middleware error:', err.message);
