@@ -10,6 +10,23 @@ const { startKeepAlive } = require('./services/keepAlive');
 
 const app = express();
 
+// TEMP request tracer (debugging the admin loading hang — remove later)
+const traceFs = require('fs');
+const TRACE_FILE = require('path').join(require('os').tmpdir(), 'chitra-requests.log');
+app.use((req, res, next) => {
+  const started = Date.now();
+  const line = `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} origin=${req.headers.origin || '-'}`;
+  res.on('finish', () => {
+    try { traceFs.appendFileSync(TRACE_FILE, `${line} -> ${res.statusCode} (${Date.now() - started}ms)\n`); } catch {}
+  });
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      try { traceFs.appendFileSync(TRACE_FILE, `${line} -> *** NEVER FINISHED / client aborted *** (${Date.now() - started}ms)\n`); } catch {}
+    }
+  });
+  next();
+});
+
 // ---------- Security & parsing ----------
 app.use(helmet());
 app.use(express.json({ limit: '2mb' }));

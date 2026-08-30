@@ -4,11 +4,15 @@ const config = require('../config');
 let ws;
 try { ws = require('ws'); } catch { /* optional */ }
 
+// Cache the anon client — creating one per request added 1.5-3s of latency
+let cachedAnonClient = null;
 function anonClient() {
-  return createClient(config.supabase.url, config.supabase.anonKey, {
+  if (cachedAnonClient) return cachedAnonClient;
+  cachedAnonClient = createClient(config.supabase.url, config.supabase.anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },
     ...(ws ? { realtime: { transport: ws } } : {}),
   });
+  return cachedAnonClient;
 }
 
 /**
