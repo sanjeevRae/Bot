@@ -158,3 +158,4 @@ async function runChatForChannel(orgId, sessionId, message, channel) {
 }
 
 module.exports = router;
+module.exports.runChatForChannel = runChatForChannel;

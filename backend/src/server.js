@@ -12,6 +12,9 @@ const app = express();
 
 // ---------- Security & parsing ----------
 app.use(helmet());
+// The OpenWA webhook must be received as a RAW body so its HMAC-SHA256 signature
+// can be verified over the exact bytes. Mount this BEFORE the global express.json().
+app.use('/api/webhooks/openwa', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(fileUpload({ limits: { fileSize: 6 * 1024 * 1024 } }));
 
@@ -59,6 +62,10 @@ app.use('/api/leads', require('./routes/leads'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/org', require('./routes/org'));
 app.use('/api/channels', require('./routes/channels'));
+// OpenWA (self-hosted gateway): signed webhook + org-scoped management endpoints
+const { webhookRouter, orgRouter } = require('./routes/openwa');
+app.use('/api/webhooks', webhookRouter);
+app.use('/api/org/openwa', orgRouter);
 app.use('/api/inbox', require('./routes/inbox'));
 app.use('/api/billing', require('./routes/billing'));
 app.use('/api/agency', require('./routes/agency'));
