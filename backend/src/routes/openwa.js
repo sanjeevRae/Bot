@@ -125,10 +125,23 @@ async function handleOpenwaEvent(payload) {
   const isGroup = data.isGroup === true || String(data.chatId || '').endsWith('@g.us');
   if (isGroup) return; // group messages ignored for this integration
 
-  const from = sanitizeJid(data.from || data.chatId);
+  let from = sanitizeJid(data.from || data.chatId);
   if (!from) return;
 
   console.log('[OpenWA] Incoming message', { event, sessionId, from });
+
+  // WhatsApp privacy ids (`@lid`) cannot be used as send targets — resolve the
+  // real phone number first so replies reach the customer.
+  let replyTo = from;
+  if (from.endsWith('@lid')) {
+    const phone = await openwa.resolvePhone(sessionId, from);
+    if (phone) {
+      replyTo = `${phone.replace(/\D/g, '')}@c.us`;
+      console.log('[OpenWA] Resolved privacy id to phone', { from, replyTo });
+    } else {
+      console.warn('[OpenWA] Could not resolve privacy id to a phone; replying to raw JID', { from });
+    }
+  }
 
   // Resolve org from stored mapping — never trust payload-supplied org.
   const conn = await getConnectionBySession(sessionId);
@@ -139,7 +152,7 @@ async function handleOpenwaEvent(payload) {
   console.log('[OpenWA] Session identified', { sessionId, orgId: conn.organization_id });
 
   const orgId = conn.organization_id;
-  const sessionKey = `whatsapp_${from.split('@')[0]}`;
+  const sessionKey = `whatsapp_${replyTo.split('@')[0]}`;
   const messageBody = body.slice(0, 4000);
 
   try {
@@ -152,11 +165,11 @@ async function handleOpenwaEvent(payload) {
       channel: 'whatsapp',
     });
 
-    console.log('[OpenWA] Processing with Chitra AI', { sessionId, orgId, from });
+    console.log('[OpenWA] Processing with Chitra AI', { sessionId, orgId, replyTo });
     // Reuse the existing RAG + Groq + tools + quota pipeline (no duplicate AI logic).
     const reply = await runChatForChannel(orgId, sessionKey, messageBody, 'whatsapp');
     if (!reply || !reply.trim()) {
-      console.warn('[OpenWA] Empty AI reply', { sessionId, orgId, from });
+      console.warn('[OpenWA] Empty AI reply', { sessionId, orgId, replyTo });
       return;
     }
 
@@ -169,12 +182,12 @@ async function handleOpenwaEvent(payload) {
       channel: 'whatsapp',
     });
 
-    console.log('[OpenWA] Sending response', { sessionId, orgId, from });
-    await openwa.sendText(sessionId, from, reply.slice(0, 4096));
-    console.log('[OpenWA] Message sent', { sessionId, orgId, from });
+    console.log('[OpenWA] Sending response', { sessionId, orgId, replyTo });
+    await openwa.sendText(sessionId, replyTo, reply.slice(0, 4096));
+    console.log('[OpenWA] Message sent', { sessionId, orgId, replyTo });
   } catch (err) {
     // Crash the message, never the process.
-    console.error('[OpenWA] Message handling failed:', err.message, { sessionId, orgId, from });
+    console.error('[OpenWA] Message handling failed:', err.message, { sessionId, orgId, replyTo });
   }
 }
 
