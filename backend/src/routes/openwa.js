@@ -207,7 +207,9 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
       connected: !!conn?.openwa_session_id,
       sessionId: conn?.openwa_session_id || '',
       phoneNumber: conn?.phone_number || '',
-      status: live?.status || conn?.status || 'disconnected',
+      status: (conn?.status === 'disconnected' || conn?.status === 'error')
+        ? conn.status                                   // respect the soft disconnect switch
+        : (live?.status || conn?.status || 'disconnected'),
       webhookUrl: `${backendUrl.replace(/\/+$/, '')}/api/webhooks/openwa`,
     },
   });
