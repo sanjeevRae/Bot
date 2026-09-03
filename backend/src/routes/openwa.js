@@ -257,6 +257,20 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
     .eq('organization_id', req.orgId)
     .maybeSingle();
 
+  // The unique index on openwa_session_id means one WhatsApp session can only
+  // belong to one organization — surface that as a clear 409, not a 500.
+  const { data: sessionOwner } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .select('organization_id')
+    .eq('openwa_session_id', sessionId)
+    .neq('organization_id', req.orgId)
+    .maybeSingle();
+  if (sessionOwner) {
+    return res.status(409).json({
+      error: 'This OpenWA session is already connected to another organization. Disconnect it there first.',
+    });
+  }
+
   const payload = {
     organization_id: req.orgId,
     provider: 'openwa',
