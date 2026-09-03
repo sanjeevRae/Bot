@@ -110,6 +110,24 @@ async function listWebhooks(sessionId) {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/webhooks`);
 }
 
+/**
+ * Resolve a privacy-id sender (`@lid`) to its real phone digits.
+ * Returns the phone digits (e.g. "9779810135468") or null when unmappable.
+ * Used because WhatsApp increasingly delivers senders as `@lid` JIDs that
+ * cannot be used as send targets directly.
+ */
+async function resolvePhone(sessionId, contactId) {
+  try {
+    const data = await request(
+      `/api/sessions/${encodeURIComponent(sessionId)}/contacts/${encodeURIComponent(contactId)}/phone`
+    );
+    const phone = data && (data.phone || data.phoneNumber || data.number);
+    return typeof phone === 'string' && phone.trim() ? phone.trim() : null;
+  } catch {
+    return null; // best-effort: callers fall back to the raw JID
+  }
+}
+
 module.exports = {
   listSessions,
   getSession,
@@ -120,4 +138,5 @@ module.exports = {
   sendText,
   registerWebhook,
   listWebhooks,
+  resolvePhone,
 };

@@ -24,6 +24,11 @@ create unique index if not exists whatsapp_connections_org_idx
 create index if not exists whatsapp_connections_session_idx
   on public.whatsapp_connections(openwa_session_id);
 
+-- SECURITY: one WhatsApp session may belong to exactly one organization.
+-- (Prevents the same OpenWA session from being claimed by a second org.)
+create unique index if not exists whatsapp_connections_session_unique_idx
+  on public.whatsapp_connections(openwa_session_id);
+
 alter table public.whatsapp_connections enable row level security;
 
 drop policy if exists "whatsapp_connections_org_all" on public.whatsapp_connections;
