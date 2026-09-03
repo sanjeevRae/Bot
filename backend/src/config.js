@@ -42,6 +42,16 @@ const config = {
     pageToken: process.env.MESSENGER_PAGE_TOKEN || '',
   },
 
+  // Self-hosted OpenWA WhatsApp gateway (external service — runs on the user's own
+  // machine/Docker, reached from Render via a Cloudflare Tunnel). API auth uses the
+  // X-API-Key header; webhooks are HMAC-signed with webhookSecret.
+  //  - baseUrl: http://localhost:2785 in local dev, https://wa.<your-domain> in production.
+  openwa: {
+    baseUrl: process.env.OPENWA_BASE_URL || '',
+    apiKey: process.env.OPENWA_API_KEY || '',            // server-only; never exposed to the frontend
+    webhookSecret: process.env.OPENWA_WEBHOOK_SECRET || '', // >= 16 chars; signs OpenWA webhook deliveries
+  },
+
   // Email notifications (Resend — free tier: 100 emails/day, no card)
   email: {
     apiKey: process.env.RESEND_API_KEY || '',
