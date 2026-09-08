@@ -44,6 +44,19 @@ const strictCors = cors({
 const helmetPublic = helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginEmbedderPolicy: false,
+  // The hosted /bot page is a self-contained HTML page with an inline <script>
+  // and <style>. Helmet's strict default CSP (script-src 'self') blocks those,
+  // so relax it for the public embeddable endpoints only — every authenticated
+  // dashboard route keeps Helmet's strict default.
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'script-src': ["'self'", "'unsafe-inline'"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'connect-src': ["'self'", 'https:'],
+      'img-src': ["'self'", 'data:', 'https:'],
+    },
+  },
 });
 app.use('/api/chat', publicCors);
 app.use('/widget.js', publicCors);

@@ -254,7 +254,7 @@ document.querySelector('form').onsubmit=function(e){e.preventDefault();
 var i=document.getElementById('in'),t=i.value.trim();if(!t)return;i.value='';add(t,'user');
 fetch('${backendUrl}/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
 body:JSON.stringify({orgId:'${orgId}',sessionId:sid,message:t})})
-.then(function(r){return r.json()}).then(function(d){add(d.reply||d.error||'Error','bot')});
+.then(function(r){return r.json()}).then(function(d){add(d.reply||d.error||'Error','bot')}).catch(function(){add('Connection error. Please try again.','bot')});
 };
 </script></body></html>`);
 });
