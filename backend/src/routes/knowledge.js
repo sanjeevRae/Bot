@@ -2,7 +2,7 @@ const express = require('express');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { ingestDocument, deleteDocument } = require('../services/rag');
-const { crawlUrl } = require('../services/ingest');
+const { crawlSite } = require('../services/ingest');
 const { importGoogleDrive, importNotion } = require('../services/imports');
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.post('/crawl', async (req, res) => {
     let normalized = url.trim();
     if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
 
-    const text = await crawlUrl(normalized);
+    const { text, pages } = await crawlSite(normalized);
     if (!text || text.length < 50) {
       return res.status(400).json({ error: 'Could not extract meaningful content from that URL' });
     }
@@ -41,7 +41,7 @@ router.post('/crawl', async (req, res) => {
       url: normalized,
       text,
     });
-    res.json({ ok: true, ...result });
+    res.json({ ok: true, ...result, pagesCrawled: pages.length, pages });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }
