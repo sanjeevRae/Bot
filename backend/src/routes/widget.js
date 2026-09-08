@@ -70,12 +70,12 @@ router.get('/widget.js', async (req, res) => {
     'background:'+BRAND+';color:#fff;border:none;font-size:24px;cursor:pointer;z-index:999999;',
     'box-shadow:0 4px 16px rgba(0,0,0,.25);transition:transform .15s}',
     '#chitra-launcher:hover{transform:scale(1.08)}',
-    '#chitra-panel{position:fixed;bottom:88px;right:20px;width:360px;max-width:calc(100vw - 32px);height:520px;',
+    '#chitra-panel{position:fixed;bottom:88px;right:20px;width:360px;max-width:calc(100vw - 32px);height:520px;overscroll-behavior:contain;',
     'max-height:calc(100vh - 120px);background:#fff;border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.2);',
     'z-index:999999;display:none;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif}',
     '#chitra-panel.open{display:flex}',
     '.chitra-header{background:'+BRAND+';color:#fff;padding:14px 16px;font-weight:600;font-size:15px}',
-    '#chitra-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f9fafb}',
+    '#chitra-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f9fafb;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}',
     '.chitra-msg{max-width:82%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}',
     '.chitra-msg.bot{background:#fff;border:1px solid #e5e7eb;align-self:flex-start;border-bottom-left-radius:4px}',
     '.chitra-msg.user{background:'+BRAND+';color:#fff;align-self:flex-end;border-bottom-right-radius:4px}',
@@ -108,6 +108,14 @@ router.get('/widget.js', async (req, res) => {
   var sessionId = localStorage.getItem('chitra_session') ||
     (localStorage.setItem('chitra_session','s_'+Math.random().toString(36).slice(2)+Date.now()),
      localStorage.getItem('chitra_session'));
+
+  // Scroll isolation: when the cursor is over the chat panel, the wheel
+  // scrolls the conversation — never the host website behind it.
+  panel.addEventListener('wheel', function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    msgs.scrollTop += e.deltaY;
+  }, { passive: false });
 
   function addMsg(text, who){
     var d=document.createElement('div');
