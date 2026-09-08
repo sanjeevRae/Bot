@@ -23,6 +23,11 @@ function chunkText(text, chunkSize = config.rag.chunkSize, overlap = config.rag.
 function extractTextFromHtml(html) {
   // Lightweight extraction without heavy deps
   let text = html;
+  // De-noise: boilerplate blocks (nav/footer/header/aside + cookie banners)
+  // repeat on every page and waste the crawl budget — drop them early.
+  text = text.replace(/<(nav|footer|header|aside)\b[\s\S]*?<\/\1>/gi, ' ');
+  text = text.replace(/<[^>]+(role=["'](navigation|banner|contentinfo|complementary)["'])[^>]*>[\s\S]*?<\/[^>]+>/gi, ' ');
+  text = text.replace(/<div[^>]*(class|id)=["'][^"']*(cookie|consent|gdpr|banner|newsletter|social-share|breadcrumb)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, ' ');
   text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ');
   text = text.replace(/<style[\s\S]*?<\/style>/gi, ' ');
   text = text.replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ');
@@ -163,6 +168,66 @@ function extractJsonLd(html) {
           out.push('[FAQ] Q: ' + line(q.name) + '\nA: ' + line(q.acceptedAnswer.text));
         }
       });
+    } else if (/Event/i.test(type)) {
+      const parts = [];
+      if (node.name) parts.push(line(node.name));
+      if (node.startDate) parts.push('Starts: ' + line(node.startDate));
+      if (node.endDate) parts.push('Ends: ' + line(node.endDate));
+      if (node.location) parts.push('Location: ' + line(node.location.name || node.location.address || node.location));
+      if (node.offer || node.offers) {
+        const o = Array.isArray(node.offers) ? node.offers[0] : node.offers;
+        if (o && o.price != null) parts.push('Price: ' + line(o.price) + (o.priceCurrency ? ' ' + o.priceCurrency : ''));
+      }
+      if (node.description) parts.push(line(node.description));
+      if (parts.length) out.push('[Event] ' + parts.join(' | '));
+    } else if (/JobPosting/i.test(type)) {
+      const parts = [];
+      if (node.title) parts.push(line(node.title));
+      if (node.hiringOrganization) parts.push('Employer: ' + line(node.hiringOrganization.name || node.hiringOrganization));
+      if (node.jobLocation) {
+        const a = node.jobLocation.address || {};
+        parts.push('Location: ' + line([a.addressLocality, a.addressRegion, a.addressCountry].filter(Boolean).join(', ')));
+      }
+      const sal = node.baseSalary && node.baseSalary.value;
+      if (sal) parts.push('Salary: ' + line([sal.minValue, sal.maxValue].filter(Boolean).join('-') + ' ' + (node.baseSalary.currency || '')));
+      if (node.employmentType) parts.push('Type: ' + line(node.employmentType));
+      if (node.description) parts.push(line(node.description).slice(0, 500));
+      if (parts.length) out.push('[Job] ' + parts.join(' | '));
+    } else if (/Course/i.test(type)) {
+      const parts = [];
+      if (node.name) parts.push(line(node.name));
+      if (node.provider) parts.push('Provider: ' + line(node.provider.name || node.provider));
+      if (node.description) parts.push(line(node.description));
+      const o = node.offers && (Array.isArray(node.offers) ? node.offers[0] : node.offers);
+      if (o && o.price != null) parts.push('Price: ' + line(o.price) + (o.priceCurrency ? ' ' + o.priceCurrency : ''));
+      if (parts.length) out.push('[Course] ' + parts.join(' | '));
+    } else if (/Apartment|House|Accommodation|SingleFamilyResidence/i.test(type)) {
+      const parts = [];
+      if (node.name) parts.push(line(node.name));
+      if (node.numberOfRooms) parts.push('Rooms: ' + line(node.numberOfRooms));
+      if (node.numberOfBedrooms) parts.push('Bedrooms: ' + line(node.numberOfBedrooms));
+      if (node.floorSize && node.floorSize.value) parts.push('Size: ' + line(node.floorSize.value) + ' ' + line(node.floorSize.unitCode || ''));
+      const o = node.offers && (Array.isArray(node.offers) ? node.offers[0] : node.offers);
+      if (o && o.price != null) parts.push('Price: ' + line(o.price) + (o.priceCurrency ? ' ' + o.priceCurrency : ''));
+      if (node.address) {
+        const a = node.address;
+        parts.push('Address: ' + line([a.streetAddress, a.addressLocality, a.addressRegion].filter(Boolean).join(', ')));
+      }
+      if (parts.length) out.push('[Property] ' + parts.join(' | '));
+    } else if (/Review/i.test(type)) {
+      const parts = [];
+      if (node.itemReviewed) parts.push(line(node.itemReviewed.name || ''));
+      if (node.reviewRating) parts.push('Rating: ' + line(node.reviewRating.ratingValue) + '/5');
+      if (node.author) parts.push('By: ' + line(node.author.name || node.author));
+      if (node.reviewBody) parts.push(line(node.reviewBody).slice(0, 300));
+      if (parts.length) out.push('[Review] ' + parts.join(' | '));
+    } else if (/Article|BlogPosting|NewsArticle/i.test(type)) {
+      const parts = [];
+      if (node.headline) parts.push(line(node.headline));
+      if (node.datePublished) parts.push('Published: ' + line(node.datePublished));
+      if (node.author) parts.push('By: ' + line(node.author.name || node.author));
+      if (node.description) parts.push(line(node.description));
+      if (parts.length) out.push('[Article] ' + parts.join(' | '));
     } else if (/LocalBusiness|Organization|Store|Restaurant/i.test(type)) {
       const parts = [];
       if (node.name) parts.push(line(node.name));
@@ -184,6 +249,42 @@ function extractJsonLd(html) {
   for (const m of blocks) {
     try { walk(JSON.parse(m[1].trim()), 0); } catch { /* malformed JSON-LD — skip */ }
   }
+  return out;
+}
+
+/**
+ * OpenGraph / Twitter / HTML-microdata fallback — catches sites that skip
+ * JSON-LD but still tag products with og: or itemprop attributes.
+ */
+/**
+ * OpenGraph / HTML-microdata fallback for sites that skip JSON-LD.
+ */
+function extractMicroData(html) {
+  const out = [];
+  const metaVal = (prop) => {
+    const re = new RegExp("<meta[^>]+(?:property|name)=\"?[^>]{0,40}" + prop + "\"?[^>]*content=\"([^\"]{1,300})\"", "i");
+    const m = html.match(re);
+    return m ? m[1].trim() : null;
+  };
+  const attr = (prop) => {
+    const re = new RegExp("itemprop=\"[^>]{0,40}" + prop + "[^>]*content=\"([^\"]{1,120})\"", "i");
+    const m = html.match(re);
+    return m ? m[1].trim() : null;
+  };
+  const stripNs = (s) => String(s).replace(/^https?:\/\/schema\.org\//i, "");
+  const price = metaVal("product:price:amount") || metaVal("og:price:amount");
+  const curr = metaVal("product:price:currency");
+  const avail = metaVal("product:availability") || metaVal("og:availability");
+  const title = metaVal("og:title");
+  if (title) out.push("[Meta] Title: " + title);
+  if (price) out.push("[Meta] Price: " + price + (curr ? " " + curr : ""));
+  if (avail) out.push("[Meta] Availability: " + stripNs(avail));
+  const mPrice = attr("price");
+  const mAvail = attr("availability");
+  const mName = attr("name");
+  if (mName && !title) out.push("[Meta] Name: " + mName);
+  if (mPrice && !price) out.push("[Meta] Price: " + mPrice);
+  if (mAvail && !avail) out.push("[Meta] Availability: " + stripNs(mAvail));
   return out;
 }
 
@@ -225,8 +326,15 @@ async function fetchPageText(url) {
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   const html = await res.text();
 
-  const structured = extractJsonLd(html);
+  const structured = extractJsonLd(html).concat(extractMicroData(html));
   let text = extractTextFromHtml(html);
+
+  // Per-page cap: one bloated page must not eat the whole crawl budget.
+  const PAGE_CAP = 30000;
+  if (text.length > PAGE_CAP) {
+    const cut = text.lastIndexOf('\n', PAGE_CAP);
+    text = text.slice(0, cut > 1000 ? cut : PAGE_CAP);
+  }
 
   const title = (html.match(/<title[^>]*>([^<]{1,200})<\/title>/i) || [])[1];
   const desc = (html.match(/<meta\s+(?:name="description"|property="og:description")\s+content="([^"]{1,400})"/i) || [])[1];
@@ -251,7 +359,18 @@ async function fetchPageText(url) {
   }
 
   const combined = [meta, text, structured.join('\n')].filter(Boolean).join('\n\n');
-  return { text: combined, links: extractLinks(html, url) };
+
+  // Pagination: rel="next" or common ?page= patterns — follow listing pages.
+  let next = null;
+  const nextMatch = html.match(/<link[^>]+rel=["']next["'][^>]+href=["']([^"']+)["']/i)
+    || html.match(/<a[^>]+(?:rel=["']next["']|class=["'][^"']*\bnext\b)[^>]+href=["']([^"']+)["']/i)
+    || html.match(/<a[^>]+href=["']([^"']*\?page=\d+[^"']*)["'][^>]*>/i);
+  if (nextMatch) {
+    next = normalizeUrl(new URL(nextMatch[1], url).href);
+    if (next && !next.startsWith(new URL(url).origin)) next = null;
+  }
+
+  return { text: combined, links: extractLinks(html, url), next };
 }
 
 /** Legacy single-page helper (kept for compatibility). */
@@ -300,21 +419,23 @@ async function collectSitemapUrls(origin) {
 }
 
 /**
- * Crawl a website: start page + same-origin links (BFS) + sitemap URLs.
- * Lightweight (no headless browser) but deep enough to reach product and
- * category pages on e-commerce sites. Slow at crawl time by design — once
- * ingested, RAG answers stay instant.
+ * Crawl a website: start page + same-origin links (depth-aware BFS) + sitemap
+ * URLs + rel="next" pagination. Lightweight (no headless browser) but deep
+ * enough to reach product and category pages on e-commerce sites.
+ * Slow at crawl time by design — once ingested, RAG answers stay instant.
  *
  * @returns {Promise<{text: string, pages: string[]}>}
  */
 async function crawlSite(startUrl, opts = {}) {
-  const maxPages = Math.min(parseInt(opts.maxPages || process.env.CRAWL_MAX_PAGES || '40', 10) || 40, 200);
+  const maxPages = Math.min(parseInt(opts.maxPages || process.env.CRAWL_MAX_PAGES || '75', 10) || 75, 200);
+  const maxDepth = Math.max(0, parseInt(opts.maxDepth || process.env.CRAWL_MAX_DEPTH || '3', 10) || 3);
   const concurrency = Math.max(1, parseInt(process.env.CRAWL_CONCURRENCY || '3', 10) || 3);
-  const maxTotalChars = parseInt(process.env.CRAWL_MAX_TOTAL_CHARS || '600000', 10) || 600000;
+  const maxTotalChars = parseInt(process.env.CRAWL_MAX_TOTAL_CHARS || '1000000', 10) || 1000000;
   const origin = new URL(startUrl).origin;
 
-  // Queue: sitemap URLs first (full catalog), then the start page.
-  // Product/collection URLs jump the queue — they carry the most answerable data.
+  // Queue items: { url, depth } — depth 0 = always allowed (sitemap + start),
+  // link-discovered pages must respect maxDepth.
+  // Sitemap URLs first (full catalog), product/collection URLs jump the queue.
   const queue = [];
   try {
     const sm = await collectSitemapUrls(origin);
@@ -324,9 +445,9 @@ async function crawlSite(startUrl, opts = {}) {
     const isProducty = (u) => /product|item|collection|shop|catalog|\-p\-|\/p\//i.test(u);
     const producty = sm.filter(isProducty);
     const rest = sm.filter((u) => !isProducty(u));
-    queue.push(...producty, ...rest);
+    queue.push(...[...producty, ...rest].map((url) => ({ url, depth: 0 })));
   } catch { /* sitemap is optional */ }
-  queue.unshift(normalizeUrl(startUrl));
+  queue.unshift({ url: normalizeUrl(startUrl), depth: 0 });
 
   const seen = new Set();
   const results = [];
@@ -336,20 +457,24 @@ async function crawlSite(startUrl, opts = {}) {
   const worker = async () => {
     for (;;) {
       if (fetched >= maxPages || totalChars >= maxTotalChars) return;
-      const url = queue.shift();
-      if (!url) return;
-      if (seen.has(url)) continue;
-      seen.add(url);
+      const item = queue.shift();
+      if (!item) return;
+      if (seen.has(item.url)) continue;
+      seen.add(item.url);
       fetched++;
       try {
-        const { text, links } = await fetchPageText(url);
+        const { text, links, next } = await fetchPageText(item.url);
         if (!text || text.length < 40) continue;
         if (totalChars + text.length > maxTotalChars) return;
         totalChars += text.length;
-        results.push('=== ' + url + ' ===\n' + text);
-        // Enqueue newly discovered same-origin pages (BFS depth via queue order)
-        for (const link of links) {
-          if (!seen.has(link)) queue.push(link);
+        results.push('=== ' + item.url + ' ===\n' + text);
+        // Pagination wins priority — listing pages lead deep into the catalog.
+        if (next && !seen.has(next)) queue.unshift({ url: next, depth: item.depth });
+        // Enqueue newly discovered same-origin pages (respect depth budget)
+        if (item.depth < maxDepth) {
+          for (const link of links) {
+            if (!seen.has(link)) queue.push({ url: link, depth: item.depth + 1 });
+          }
         }
       } catch { /* dead link / timeout — skip */ }
     }
@@ -363,4 +488,4 @@ async function crawlSite(startUrl, opts = {}) {
   };
 }
 
-module.exports = { chunkText, extractTextFromHtml, extractJsonLd, crawlUrl, crawlSite };
+module.exports = { chunkText, extractTextFromHtml, extractJsonLd, extractMicroData, crawlUrl, crawlSite };

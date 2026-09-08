@@ -34,6 +34,20 @@ router.post('/crawl', async (req, res) => {
       return res.status(400).json({ error: 'Could not extract meaningful content from that URL' });
     }
 
+    // Refresh mode: replace the previous crawl of the same URL instead of
+    // stacking a duplicate (lets merchants re-sync prices/stock periodically).
+    if (req.body.refresh) {
+      const { data: old } = await supabaseAdmin
+        .from('documents')
+        .select('id')
+        .eq('organization_id', req.orgId)
+        .eq('url', normalized)
+        .eq('source_type', 'crawl');
+      for (const doc of old || []) {
+        try { await deleteDocument(req.orgId, doc.id); } catch { /* keep going */ }
+      }
+    }
+
     const result = await ingestDocument({
       organizationId: req.orgId,
       title: title || new URL(normalized).hostname,
