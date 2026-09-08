@@ -123,7 +123,7 @@ router.get('/widget.js', async (req, res) => {
   }
   function inline(s){
     return esc(s)
-      .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+      .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
       .replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>')
       .replace(new RegExp('\x60([^\x60]+)\x60','g'),'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
       .replace(new RegExp('\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)','g'),'<a href="$2" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>');
