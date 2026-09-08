@@ -10,6 +10,11 @@ const { startKeepAlive } = require('./services/keepAlive');
 
 const app = express();
 
+// Render (and other PaaS hosts) sit behind a reverse proxy → trust the first
+// proxy hop so express-rate-limit reads real client IPs from X-Forwarded-For.
+// Without this, express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // ---------- Security & parsing ----------
 app.use(helmet());
 // The OpenWA webhook must be received as a RAW body so its HMAC-SHA256 signature
