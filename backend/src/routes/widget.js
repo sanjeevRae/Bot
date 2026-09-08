@@ -74,7 +74,9 @@ router.get('/widget.js', async (req, res) => {
     'max-height:calc(100vh - 120px);background:#fff;border-radius:16px;box-shadow:0 12px 48px rgba(0,0,0,.2);',
     'z-index:999999;display:none;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif}',
     '#chitra-panel.open{display:flex}',
-    '.chitra-header{background:'+BRAND+';color:#fff;padding:14px 16px;font-weight:600;font-size:15px}',
+    '.chitra-header{background:'+BRAND+';color:#fff;padding:12px 14px;font-weight:600;font-size:15px;display:flex;justify-content:space-between;align-items:center}',
+    '#chitra-close{background:transparent;border:none;color:#fff;font-size:22px;line-height:1;cursor:pointer;padding:0 4px;font-weight:400}',
+    '#chitra-close:hover{opacity:.75}',
     '#chitra-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f9fafb;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}',
     '.chitra-msg{max-width:82%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}',
     '.chitra-msg.bot{background:#fff;border:1px solid #e5e7eb;align-self:flex-start;border-bottom-left-radius:4px}',
@@ -88,7 +90,7 @@ router.get('/widget.js', async (req, res) => {
   var panel = document.createElement('div');
   panel.id = 'chitra-panel';
   panel.innerHTML =
-    '<div class="chitra-header">'+BOT_NAME+'</div>' +
+    '<div class="chitra-header"><span>'+BOT_NAME+'</span><button id="chitra-close" type="button" aria-label="Close chat">&times;</button></div>' +
     '<div id="chitra-msgs"></div>' +
     '<form id="chitra-form"><input id="chitra-input" placeholder="Type a message..." autocomplete="off"/>' +
     '<button id="chitra-send" type="submit">Send</button></form>' +
@@ -116,6 +118,10 @@ router.get('/widget.js', async (req, res) => {
     e.stopPropagation();
     msgs.scrollTop += e.deltaY;
   }, { passive: false });
+
+  // Close button: hides the chat panel (the launcher button reopens it)
+  var closeBtn = document.getElementById('chitra-close');
+  if (closeBtn) closeBtn.onclick = function(){ panel.classList.remove('open'); };
 
   function addMsg(text, who){
     var d=document.createElement('div');
