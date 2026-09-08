@@ -126,6 +126,7 @@ router.get('/widget.js', async (req, res) => {
       .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
       .replace(/(^|[^*])\\*([^*]+)\\*/g,'$1<em>$2</em>')
       .replace(new RegExp('\x60([^\x60]+)\x60','g'),'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
+      .replace(new RegExp('&lt;(https?:[^&\\\\s]+)&gt;','g'),'<a href="$1" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>')
       .replace(new RegExp('\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)','g'),'<a href="$2" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>');
   }
   function renderMd(container, text){
@@ -248,7 +249,7 @@ h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bott
 <form><input id="in" placeholder="Type a message..." autocomplete="off"/><button>Send</button></form></div>
 <script>
 var msgs=document.getElementById('msgs'),sid='s_'+Math.random().toString(36).slice(2)+Date.now();
-function add(t,w){var d=document.createElement('div');d.className='msg '+w;d.textContent=t;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
+function add(t,w){t=String(t).replace(/<(https?:\\/[^>\\s]+)>/g,'$1');var d=document.createElement('div');d.className='msg '+w;d.textContent=t;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
 add('Hi! How can I help you today?','bot');
 document.querySelector('form').onsubmit=function(e){e.preventDefault();
 var i=document.getElementById('in'),t=i.value.trim();if(!t)return;i.value='';add(t,'user');
