@@ -18,23 +18,40 @@ function chunkText(text, chunkSize = config.rag.chunkSize, overlap = config.rag.
 }
 
 /**
- * Extract readable text from raw HTML (for website crawling).
+ * Extract readable text from raw HTML using Cheerio (robust DOM parsing).
+ * De-noises boilerplate (nav/footer/cookie banners) and prefers the main
+ * content region when the page has one.
  */
+const cheerio = require('cheerio');
+
 function extractTextFromHtml(html) {
-  // Lightweight extraction without heavy deps
-  let text = html;
-  // De-noise: boilerplate blocks (nav/footer/header/aside + cookie banners)
-  // repeat on every page and waste the crawl budget — drop them early.
-  text = text.replace(/<(nav|footer|header|aside)\b[\s\S]*?<\/\1>/gi, ' ');
-  text = text.replace(/<[^>]+(role=["'](navigation|banner|contentinfo|complementary)["'])[^>]*>[\s\S]*?<\/[^>]+>/gi, ' ');
-  text = text.replace(/<div[^>]*(class|id)=["'][^"']*(cookie|consent|gdpr|banner|newsletter|social-share|breadcrumb)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, ' ');
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, ' ');
-  text = text.replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ');
-  text = text.replace(/<\/(p|div|h[1-6]|li|tr|section|article)>/gi, '\n');
-  text = text.replace(/<br\s*\/?>/gi, '\n');
-  text = text.replace(/<[^>]+>/g, ' ');
-  text = text
+  const $ = cheerio.load(html);
+  return extractTextFrom$($);
+}
+
+function extractTextFrom$($) {
+  // De-noise: scripts, styles, boilerplate blocks, cookie banners
+  $(
+    'script, style, noscript, nav, footer, header, aside, form, iframe, svg, [role="navigation"], [role="banner"], [role="contentinfo"]'
+  ).remove();
+  $('[class*=cookie], [id*=cookie], [class*=consent], [class*=newsletter], [class*=social-share], [class*=breadcrumb]').remove();
+
+  // Prefer the main content region if the page has one
+  let $root = $('main, article, [role="main"], #content, .content').first();
+  if ($root.length === 0) $root = $('body');
+  if ($root.length === 0) $root = $.root();
+
+  // Preserve line breaks at block boundaries
+  $root.find('br').replaceWith('\n');
+  $root
+    .find('p, div, h1, h2, h3, h4, h5, h6, li, tr, section, article, td, th')
+    .each(function () {
+      const $el = $(this);
+      $el.append('\n');
+    });
+
+  const text = $root
+    .text()
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -130,7 +147,14 @@ async function crawlUrl(url) {
  * and reviews — data invisible to plain tag-stripping.
  */
 function extractJsonLd(html) {
-  const blocks = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const $ = cheerio.load(html);
+  return extractJsonLdFrom$($);
+}
+
+function extractJsonLdFrom$($) {
+  const blocks = $('script[type="application/ld+json"]')
+    .map(function () { return $(this).html(); })
+    .get();
   const out = [];
   const line = (s) => String(s).replace(/\s+/g, ' ').trim();
 
@@ -247,7 +271,7 @@ function extractJsonLd(html) {
   };
 
   for (const m of blocks) {
-    try { walk(JSON.parse(m[1].trim()), 0); } catch { /* malformed JSON-LD — skip */ }
+    try { walk(JSON.parse(m.trim()), 0); } catch { /* malformed JSON-LD — skip */ }
   }
   return out;
 }
@@ -300,17 +324,20 @@ function normalizeUrl(u) {
   } catch { return null; }
 }
 
-/** Collect same-origin, content-page links from an HTML document. */
-function extractLinks(html, baseUrl) {
-  const origin = new URL(baseUrl).origin;
+/** Collect same-origin, content-page links from a loaded Cheerio document. */
+function extractLinksFrom$($, baseUrl) {
+  const baseUrlStr = baseUrl || ($.root().attr('base') || '');
+  const origin = new URL(baseUrlStr || 'http://placeholder.local').origin;
   const skipExt = /\.(jpg|jpeg|png|gif|webp|svg|css|js|pdf|zip|mp4|mp3|ico|woff2?|ttf|xml|json)(\?|$)/i;
   const links = [];
-  for (const m of html.matchAll(/<a[^>]+href=["']([^"'#]+)["']/gi)) {
-    const n = normalizeUrl(new URL(m[1], baseUrl).href);
-    if (!n || !n.startsWith(origin) || skipExt.test(n)) continue;
-    if (/\/(cart|checkout|login|signup|register|account|wishlist|compare)(\/|$)/i.test(n)) continue;
+  $('a[href]').each(function () {
+    const href = $(this).attr('href');
+    if (!href || href.startsWith('#')) return;
+    const n = normalizeUrl(new URL(href, baseUrlStr).href);
+    if (!n || !n.startsWith(origin) || skipExt.test(n)) return;
+    if (/\/(cart|checkout|login|signup|register|account|wishlist|compare)(\/|$)/i.test(n)) return;
     links.push(n);
-  }
+  });
   return links;
 }
 
@@ -324,10 +351,18 @@ async function fetchPageText(url) {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  // Memory guardrail: skip giant pages (their DOM tree would spike memory).
+  const len = parseInt(res.headers.get('content-length') || '0', 10);
+  if (len > 1.5 * 1024 * 1024) throw new Error(`Page too large (${len} bytes): ${url}`);
   const html = await res.text();
+  if (html.length > 1.5 * 1024 * 1024) throw new Error(`Page too large (${html.length} bytes): ${url}`);
 
-  const structured = extractJsonLd(html).concat(extractMicroData(html));
-  let text = extractTextFromHtml(html);
+  // ONE Cheerio load per page — text, JSON-LD and links all share this DOM.
+  // (Three separate loads tripled the memory peak; this keeps the crawl lean.)
+  const $ = cheerio.load(html);
+
+  const structured = extractJsonLdFrom$($).concat(extractMicroData(html));
+  let text = extractTextFrom$($);
 
   // Per-page cap: one bloated page must not eat the whole crawl budget.
   const PAGE_CAP = 30000;
@@ -370,7 +405,7 @@ async function fetchPageText(url) {
     if (next && !next.startsWith(new URL(url).origin)) next = null;
   }
 
-  return { text: combined, links: extractLinks(html, url), next };
+  return { text: combined, links: extractLinksFrom$($, url), next };
 }
 
 /** Legacy single-page helper (kept for compatibility). */
@@ -427,6 +462,23 @@ async function collectSitemapUrls(origin) {
  * @returns {Promise<{text: string, pages: string[]}>}
  */
 async function crawlSite(startUrl, opts = {}) {
+  // Global single-flight lock: only one crawl runs at a time across the whole
+  // server, guaranteeing memory stays bounded no matter how many users click
+  // "crawl" simultaneously. Others queue here until it's their turn.
+  while (_crawlRunning) {
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  _crawlRunning = true;
+  try {
+    return await _crawlSiteInner(startUrl, opts);
+  } finally {
+    _crawlRunning = false;
+  }
+}
+
+let _crawlRunning = false;
+
+async function _crawlSiteInner(startUrl, opts = {}) {
   const maxPages = Math.min(parseInt(opts.maxPages || process.env.CRAWL_MAX_PAGES || '75', 10) || 75, 200);
   const maxDepth = Math.max(0, parseInt(opts.maxDepth || process.env.CRAWL_MAX_DEPTH || '3', 10) || 3);
   const concurrency = Math.max(1, parseInt(process.env.CRAWL_CONCURRENCY || '3', 10) || 3);
