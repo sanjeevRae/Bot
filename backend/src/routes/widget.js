@@ -117,73 +117,126 @@ router.get('/widget.js', async (req, res) => {
     msgs.scrollTop=msgs.scrollHeight;
   }
 
-  /* Mini markdown renderer: tables, bold, italic, code, links, lists, headings */
+    /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,
+     links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
   function esc(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+  var _stash = [];
+  function _stashPut(html){ _stash.push(html); return '\\x01' + (_stash.length - 1) + '\\x01'; }
   function inline(s){
-    return esc(s)
-      .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
-      .replace(/(^|[^*])\\*([^*]+)\\*/g,'$1<em>$2</em>')
-      .replace(new RegExp('\x60([^\x60]+)\x60','g'),'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
-      .replace(new RegExp('&lt;(https?:[^&\\\\s]+)&gt;','g'),'<a href="$1" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>')
-      .replace(new RegExp('\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)','g'),'<a href="$2" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>');
+    var out = esc(s);
+    // [text](url)
+    out = out.replace(/\\[([^\\]\\n]+)\\]\\((https?:[^)\\s]+)\\)/g, function(m,t,u){
+      return _stashPut('<a href="'+u+'" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">'+t+'</a>');
+    });
+    // <https://...> autolinks
+    out = out.replace(/&lt;(https?:\\/\\/[^&\\s]+)&gt;/g, function(m,u){
+      return _stashPut('<a href="'+u+'" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">'+u+'</a>');
+    });
+    // bare URLs
+    out = out.replace(/(^|[\\s>])(https?:\\/\\/[^\\s&<]+)/g, function(m,p,u){
+      return p + _stashPut('<a href="'+u+'" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">'+u+'</a>');
+    });
+    // bold / italic / inline code
+    out = out.replace(/\\*\\*([^*\\n]+)\\*\\*/g,'<strong>$1</strong>');
+    out = out.replace(/(^|[^*\\w])\\*([^*\\n]+)\\*/g,'$1<em>$2</em>');
+    out = out.replace(new RegExp('\\\\x60([^\\\\x60\\\\n]+)\\\\x60','g'),'<code style="background:#f3f4f6;padding:1px 5px;border-radius:4px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">$1</code>');
+    // restore stashed links (after formatting, so nothing double-processes them)
+    out = out.replace(/\\x01(\\d+)\\x01/g, function(m,i){ return _stash[+i] || ''; });
+    return out;
   }
   function renderMd(container, text){
-    var lines=String(text).split('\\n');
-    var html='', list=[], ordered=false, table=null;
+    _stash.length = 0;
+    var lines = String(text).split('\\n');
+    var html = '', list = [], ordered = false, table = null, inCode = false, codeLines = [];
 
     function flushList(){
       if(!list.length) return;
-      var items=list.map(function(it){return '<li style="margin:2px 0">'+inline(it)+'</li>';}).join('');
-      html += ordered
-        ? '<ol style="margin:4px 0;padding-left:20px">'+items+'</ol>'
-        : '<ul style="margin:4px 0;padding-left:20px">'+items+'</ul>';
-      list=[];
+      var tag = ordered ? 'ol' : 'ul';
+      var items = list.map(function(it){ return '<li style="margin:3px 0">'+inline(it)+'</li>'; }).join('');
+      html += '<'+tag+' style="margin:6px 0;padding-left:22px">'+items+'</'+tag+'>';
+      list = [];
     }
     function flushTable(){
       if(!table) return;
-      var head='<tr>'+table.header.map(function(c){return '<th style="text-align:left;padding:5px 8px;background:#f9fafb;font-weight:600">'+inline(c)+'</th>';}).join('')+'</tr>';
-      var rows=table.rows.map(function(r){
-        return '<tr>'+r.map(function(c){return '<td style="padding:5px 8px;border-top:1px solid #f0f0f0;vertical-align:top">'+inline(c)+'</td>';}).join('')+'</tr>';
+      var head = '<tr>'+table.header.map(function(c){
+        return '<th style="text-align:left;padding:7px 10px;background:'+BRAND+'14;color:#111827;font-weight:700;font-size:12px;border-bottom:2px solid '+BRAND+'40">'+inline(c)+'</th>';
+      }).join('')+'</tr>';
+      var rows = table.rows.map(function(r,ri){
+        return '<tr style="background:'+(ri%2 ? '#f9fafb' : '#fff')+'">'+r.map(function(c){
+          return '<td style="padding:6px 10px;border-top:1px solid #e5e7eb;vertical-align:top">'+inline(c)+'</td>';
+        }).join('')+'</tr>';
       }).join('');
-      html+='<div style="overflow-x:auto;margin:6px 0"><table style="border-collapse:collapse;width:100%;font-size:12px;border:1px solid #eee;border-radius:6px">'+head+rows+'</table></div>';
-      table=null;
+      html += '<div style="overflow-x:auto;margin:8px 0;border:1px solid #e5e7eb;border-radius:8px"><table style="border-collapse:collapse;width:100%;font-size:12.5px">'+head+rows+'</table></div>';
+      table = null;
     }
+    function flushAll(){ flushList(); flushTable(); }
+    function p(inner, extra){ html += '<p style="margin:4px 0;'+(extra||'')+'">'+inner+'</p>'; }
 
     for(var i=0;i<lines.length;i++){
-      var line=lines[i];
-      var tr=line.match(/^\\s*\\|(.+)\\|\\s*$/);
+      var line = lines[i];
+
+      // fenced code blocks
+      if(/^\\s*\\x60{3}/.test(line)){
+        if(inCode){
+          html += '<pre style="background:#111827;color:#f9fafb;padding:10px 12px;border-radius:8px;overflow-x:auto;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:8px 0">'+esc(codeLines.join('\\n'))+'</pre>';
+          inCode=false; codeLines=[];
+        } else {
+          flushAll();
+          inCode=true;
+        }
+        continue;
+      }
+      if(inCode){ codeLines.push(line); continue; }
+
+      // tables — a header row only counts if the next line is a separator
+      var tr = line.match(/^\\s*\\|(.+)\\|\\s*$/);
       if(tr){
-        var cells=tr[1].split('|').map(function(c){return c.trim();});
-        if(cells.every(function(c){return /^:?-{2,}:?$/.test(c);})) continue;
-        if(!table) table={header:cells,rows:[]}; else table.rows.push(cells);
+        var cells = tr[1].split('|').map(function(c){ return c.trim(); });
+        var isSep = cells.every(function(c){ return /^:?-{2,}:?$/.test(c); });
+        if(isSep) continue;
+        if(!table){
+          var nxt = (lines[i+1] || '').match(/^\\s*\\|(.+)\\|\\s*$/);
+          var nxtSep = !!(nxt && nxt[1].split('|').every(function(c){ return /^:?-{2,}:?$/.test(c.trim()); }));
+          if(!nxtSep){ flushAll(); p(inline(line.trim())); continue; }
+          table = { header: cells, rows: [] };
+        } else table.rows.push(cells);
         continue;
       }
       flushTable();
 
-      var h=line.match(/^(#{1,6})\\s+(.*)/);
-      var b=line.match(/^\\s*[-•*]\\s+(.*)/);
-      var n=line.match(/^\\s*(\\d+)[.)]\\s+(.*)/);
+      if(/^\\s*(---+|\\*\\*\\*+)\\s*$/.test(line)){ flushAll(); html += '<hr style="border:none;border-top:1px solid #e5e7eb;margin:8px 0"/>'; continue; }
+
+      var h = line.match(/^(#{1,6})\\s+(.*)/);
+      var b = line.match(/^\\s*[-\\u2022*]\\s+(.+)/);
+      var n = line.match(/^\\s*(\\d+)[.)]\\s+(.+)/);
+      var bq = line.match(/^\\s*>\\s?(.*)/);
 
       if(h){
-        flushList();
-        html+='<p style="margin:6px 0 2px;font-weight:600">'+inline(h[2])+'</p>';
-      } else if(b||n){
-        var ord=!!n;
-        if(list.length && ordered!==ord) flushList();
-        ordered=ord;
-        list.push(n?n[2]:b[1]);
+        flushAll();
+        var lvl = h[1].length;
+        var size = lvl===1?'16px':lvl===2?'15px':lvl===3?'14px':'13px';
+        p(inline(h[2]), 'font-weight:700;font-size:'+size+';color:#111827');
+      } else if(b || n){
+        var ord = !!n;
+        if(list.length && ordered !== ord) flushList();
+        ordered = ord;
+        list.push(n ? n[2] : b[1]);
+      } else if(bq){
+        flushAll();
+        html += '<p style="margin:4px 0;padding:4px 10px;border-left:3px solid '+BRAND+';background:'+BRAND+'0d;color:#374151;font-size:13px">'+inline(bq[1])+'</p>';
       } else if(line.trim()){
         flushList();
-        html+='<p style="margin:3px 0">'+inline(line)+'</p>';
+        p(inline(line));
       }
     }
-    flushList();
-    flushTable();
-    container.innerHTML=html || esc(text);
+    if(inCode && codeLines.length){
+      html += '<pre style="background:#111827;color:#f9fafb;padding:10px 12px;border-radius:8px;overflow-x:auto;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">'+esc(codeLines.join('\\n'))+'</pre>';
+    }
+    flushAll();
+    container.innerHTML = html || esc(text);
   }
-
   addMsg(WELCOME,'bot');
 
   document.getElementById('chitra-form').onsubmit=function(e){
