@@ -48,8 +48,8 @@ router.get('/widget.js', async (req, res) => {
     .maybeSingle();
 
   const brandColor = /^#[0-9a-fA-F]{6}$/.test(settings?.brand_color || '') ? settings.brand_color : '#059669';
-  const botName = (settings?.bot_name || 'Chitra').replace(/['"\\]/g, '');
-  const welcome = (settings?.welcome_message || 'Hi! How can I help you today?').replace(/['"\\]/g, '');
+  const botName = (settings?.bot_name || 'Chitra').trim().replace(/['"\\]/g, '').trim();
+  const welcome = (settings?.welcome_message || 'Hi! How can I help you today?').trim().replace(/['"\\]/g, '').trim();
   const showBranding = !settings?.white_label;
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
@@ -124,7 +124,7 @@ router.get('/widget.js', async (req, res) => {
   function inline(s){
     return esc(s)
       .replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>')
-      .replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>')
+      .replace(/(^|[^*])\\*([^*]+)\\*/g,'$1<em>$2</em>')
       .replace(new RegExp('\x60([^\x60]+)\x60','g'),'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>')
       .replace(new RegExp('\\\\[([^\\\\]]+)\\\\]\\\\(([^)]+)\\\\)','g'),'<a href="$2" target="_blank" rel="noopener" style="color:'+BRAND+';text-decoration:underline">$1</a>');
   }
