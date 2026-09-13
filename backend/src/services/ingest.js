@@ -391,6 +391,26 @@ async function fetchPageText(url) {
         if (text.length >= 500) break;
       } catch { /* try next bundle */ }
     }
+
+    // Last resort for JS-rendered pages: Jina Reader (r.jina.ai) renders the
+    // page in a real browser server-side and returns clean text. Free tier,
+    // budgeted per crawl so we stay rate-limit friendly.
+    if (text.length < 200 && _jinaUsed < JINA_BUDGET) {
+      _jinaUsed++;
+      try {
+        const jRes = await fetch('https://r.jina.ai/' + url, { signal: AbortSignal.timeout(30000) });
+        if (jRes.ok) {
+          const jText = await jRes.text();
+          if (jText.length > text.length) {
+            text = jText
+              .replace(/^Title:.*$/m, '')
+              .replace(/^URL Source:.*$/m, '')
+              .replace(/^Markdown Content:$/m, '')
+              .trim();
+          }
+        }
+      } catch { /* jina unavailable / rate-limited — keep what we have */ }
+    }
   }
 
   const combined = [meta, text, structured.join('\n')].filter(Boolean).join('\n\n');
@@ -477,8 +497,13 @@ async function crawlSite(startUrl, opts = {}) {
 }
 
 let _crawlRunning = false;
+// Jina Reader (r.jina.ai) — free JS-rendering fallback for SPAs. Budgeted
+// per crawl so a JS-heavy site never hammers the free tier.
+const JINA_BUDGET = parseInt(process.env.CRAWL_JINA_BUDGET || '5', 10) || 5;
+let _jinaUsed = 0;
 
 async function _crawlSiteInner(startUrl, opts = {}) {
+  _jinaUsed = 0; // fresh budget per crawl
   const maxPages = Math.min(parseInt(opts.maxPages || process.env.CRAWL_MAX_PAGES || '75', 10) || 75, 200);
   const maxDepth = Math.max(0, parseInt(opts.maxDepth || process.env.CRAWL_MAX_DEPTH || '3', 10) || 3);
   const concurrency = Math.max(1, parseInt(process.env.CRAWL_CONCURRENCY || '3', 10) || 3);
