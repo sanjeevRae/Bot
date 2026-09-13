@@ -300,20 +300,24 @@ router.get(['/bot/:orgId', '/'], async (req, res) => {
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   res.type('html').send(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content"/>
 <title>Chat — ${org.name}</title>
 <style>
-body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;justify-content:center}
-#chat{width:100%;max-width:480px;height:100vh;display:flex;flex-direction:column;background:#fff}
-#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:80%;padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.5;white-space:pre-wrap}
+html,body{height:100%}
+body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;justify-content:center;overflow:hidden}
+#chat{width:100%;max-width:480px;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#fff}
+#msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.msg{max-width:85%;padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
 .bot{background:#f3f4f6;align-self:flex-start}.user{background:#6366f1;color:#fff;align-self:flex-end}
-form{display:flex;border-top:1px solid #e5e7eb}input{flex:1;border:none;padding:16px;font-size:15px;outline:none}
+.msg table{max-width:100%}
+.msg pre{max-width:100%}
+form{display:flex;border-top:1px solid #e5e7eb;background:#fff;padding-bottom:env(safe-area-inset-bottom)}
+input{flex:1;min-width:0;border:none;padding:16px;font-size:16px;outline:none}
 button{border:none;background:#6366f1;color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
 h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bottom:1px solid #eee}
 </style></head><body><div id="chat">
 <h1>💬 ${org.name}</h1><div id="msgs"></div>
-<form><input id="in" placeholder="Type a message..." autocomplete="off"/><button>Send</button></form></div>
+<form><input id="in" placeholder="Type a message..." autocomplete="off" enterkeyhint="send"/><button>Send</button></form></div>
 <script>
 var msgs=document.getElementById('msgs'),sid='s_'+Math.random().toString(36).slice(2)+Date.now();
 var BRAND = '#6366f1';
@@ -440,6 +444,10 @@ var BRAND = '#6366f1';
 
 function add(t,w){var d=document.createElement('div');d.className='msg '+w;if(w==='bot'){renderMd(d,t);}else{d.textContent=t;}msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
 add('Hi! How can I help you today?','bot');
+// Keep the input visible & conversation pinned when the mobile keyboard opens
+var inEl=document.getElementById('in');
+inEl.addEventListener('focus',function(){setTimeout(function(){msgs.scrollTop=msgs.scrollHeight;},300);});
+inEl.addEventListener('input',function(){msgs.scrollTop=msgs.scrollHeight;});
 document.querySelector('form').onsubmit=function(e){e.preventDefault();
 var i=document.getElementById('in'),t=i.value.trim();if(!t)return;i.value='';add(t,'user');
 fetch('${backendUrl}/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
