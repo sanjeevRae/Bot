@@ -89,9 +89,12 @@ async function callChatCompletion(messages, tools) {
       lastErr = err;
       const status = err?.status || err?.response?.status;
       const rateLimited = status === 429 || /rate limit/i.test(err.message || '');
+      // "User not found." = the API key is invalid/revoked — a config problem,
+      // not transient. Cooldown hard so we fail fast to the next provider.
+      const badKey = /user not found|invalid api key|authentication/i.test(err.message || '');
       // Put this provider in cooldown so subsequent calls skip straight to the next one
-      cooldowns[provider.key] = Date.now() + (rateLimited ? 60_000 : 30_000);
-      console.warn(`[LLM] ${provider.name} failed (${err.message}), trying next provider…`);
+      cooldowns[provider.key] = Date.now() + (badKey ? 30 * 60_000 : rateLimited ? 60_000 : 30_000);
+      console.warn(`[LLM] ${provider.name} failed (${err.message})${badKey ? ' — invalid/revoked API key, check provider config!' : ''}, trying next provider…`);
     }
   }
   throw lastErr || new Error('No LLM provider available');
@@ -105,9 +108,24 @@ async function callChatCompletion(messages, tools) {
  * @param {string} channel - 'web' | 'whatsapp' | 'messenger' | 'instagram'
  */
 function buildSystemPrompt(org, settings, contextChunks, channel = 'web') {
-  const context = contextChunks.length
-    ? `\n\nRelevant knowledge about this business (use it to answer; if unsure, say you don't know):\n${contextChunks
-        .map((c, i) => `[${i + 1}] ${c.content}`)
+  // Token budget: Groq free tier allows ~8,000 tokens/min. Chunks are ranked
+  // by similarity, so keep taking them until the character budget (~4 chars
+  // per token) is exhausted — big crawled KBs otherwise blow the limit (413).
+  const MAX_CONTEXT_CHARS = parseInt(process.env.MAX_CONTEXT_CHARS || '12000', 10) || 12000;
+  const parts = [];
+  let used = 0;
+  for (const c of contextChunks) {
+    const content = String(c.content || '').slice(0, 3000);
+    if (used + content.length > MAX_CONTEXT_CHARS) {
+      if (used === 0) parts.push(content.slice(0, MAX_CONTEXT_CHARS));
+      break;
+    }
+    parts.push(content);
+    used += content.length;
+  }
+  const context = parts.length
+    ? `\n\nRelevant knowledge about this business (use it to answer; if unsure, say you don't know):\n${parts
+        .map((c, i) => `[${i + 1}] ${c}`)
         .join('\n\n')}`
     : '';
 
