@@ -87,12 +87,15 @@ export default function Settings() {
 
         <section className="card p-6">
           <h2 className="mb-1 text-sm font-semibold text-ink-900">Notifications</h2>
-          <p className="mb-4 text-xs text-ink-400">Get notified of new bookings &amp; leads.</p>
+          <p className="mb-4 text-xs text-ink-400">Get notified of new bookings, leads &amp; human handoffs.</p>
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Notification email</label>
               <input type="email" placeholder="you@business.com" value={settings.notify_email || ''}
                 onChange={(e) => setSettings({ ...settings, notify_email: e.target.value })} className={inputCls} />
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                Extra address to copy on every alert. Alerts always go to the email you log in with, so you can leave this blank.
+              </p>
             </div>
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Webhook URL (Slack / Zapier / n8n)</label>
