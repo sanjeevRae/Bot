@@ -52,8 +52,10 @@ const config = {
     webhookSecret: process.env.OPENWA_WEBHOOK_SECRET || '', // >= 16 chars; signs OpenWA webhook deliveries
   },
 
-  // Email notifications (Resend — free tier: 100 emails/day, no card)
+  // Email notifications — Brevo preferred (same provider as Supabase auth
+  // mail), Resend kept as a fallback. Set either key; Brevo wins if both.
   email: {
+    brevoApiKey: process.env.BREVO_API_KEY || '',
     apiKey: process.env.RESEND_API_KEY || '',
     from: process.env.EMAIL_FROM || 'Chitra AI <onboarding@resend.dev>',
   },
