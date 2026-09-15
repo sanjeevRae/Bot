@@ -81,9 +81,6 @@ export default function Onboarding() {
               </button>
             </div>
           </div>
-          <button onClick={() => setStep(2)} className="text-sm font-medium text-brand-600">
-            Or paste text manually instead →
-          </button>
         </div>
       ) : (
         <div className="glass-card space-y-6 p-7">
