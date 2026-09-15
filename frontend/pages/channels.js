@@ -113,7 +113,7 @@ export default function Channels() {
       <section className="card mb-5 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="https://s.magecdn.com/social/tc-whatsapp.svg" alt="" width="22" height="22" />
+            <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="" width="22" height="22" />
             <h2 className="text-sm font-semibold text-ink-900">WhatsApp</h2>
           </div>
           <span className={channels.whatsapp.connected ? 'chip-success' : 'chip'}>
