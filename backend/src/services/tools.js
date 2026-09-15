@@ -106,30 +106,13 @@ function createToolExecutor(orgId, org, settings, extra = {}) {
 }
 
 /**
- * Notify the business owner of important events (new booking, lead).
- * Channels: configured webhook (Slack/Zapier/n8n) + email via Resend.
+ * Notify the business owner of important events (new booking, lead, handoff).
+ * Channels: configured webhook (Slack/Zapier/n8n) + email to the org's
+ * notification address AND every org user's login email (see services/notify.js).
  */
 async function notifyOwner(orgId, settings, message) {
-  try {
-    if (settings?.webhook_url) {
-      await fetch(settings.webhook_url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ org_id: orgId, type: 'notification', message }),
-        signal: AbortSignal.timeout(5000),
-      });
-    }
-    if (settings?.notify_email) {
-      const { sendEmail, notifyTemplate } = require('./email');
-      await sendEmail(
-        settings.notify_email,
-        message.split(':')[0].trim(), // e.g. "📅 New booking CH4X2P"
-        notifyTemplate('New activity on your bot', message)
-      );
-    }
-  } catch (e) {
-    console.warn('notifyOwner failed:', e.message);
-  }
+  const { notifyOrg } = require('./notify');
+  await notifyOrg(orgId, settings, message);
 }
 
 module.exports = { createToolExecutor };
