@@ -1,35 +1,86 @@
 const config = require('../config');
 
 /**
- * Email notifications via Resend (https://resend.com — free tier,
- * 100 emails/day, no credit card). Falls back silently when not
- * configured so the chat pipeline never breaks on notification failure.
+ * Email notifications. Two providers, HTTP APIs only (no extra deps):
+ *   1. Brevo  (https://brevo.com)  — used when BREVO_API_KEY is set.
+ *      Brevo is the same provider Supabase uses for confirmation emails,
+ *      so the sender domain is already verified there.
+ *   2. Resend (https://resend.com) — fallback when only RESEND_API_KEY is set.
+ * Falls back silently when neither is configured so the chat pipeline never
+ * breaks on notification failure.
  */
+
+/** "Chitra AI <alerts@domain.com>" -> { name, email } */
+function parseFrom(raw) {
+  const value = String(raw || '').trim();
+  const m = value.match(/^(.*?)\s*<\s*([^>]+)\s*>$/);
+  if (m) return { name: m[1].replace(/^"|"$/g, '').trim() || 'Chitra AI', email: m[2].trim() };
+  return { name: 'Chitra AI', email: value };
+}
+
+async function sendViaBrevo(to, subject, html) {
+  const sender = parseFrom(config.email.from);
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': config.email.brevoApiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`brevo ${res.status}: ${body.slice(0, 300)}`);
+  }
+}
+
+async function sendViaResend(to, subject, html) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.email.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ from: config.email.from, to, subject, html }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`resend ${res.status}: ${body.slice(0, 300)}`);
+  }
+}
+
+/** Which provider will be used, given the configured env vars. */
+function activeProvider() {
+  if (config.email.brevoApiKey) return 'brevo';
+  if (config.email.apiKey) return 'resend';
+  return null;
+}
+
 async function sendEmail(to, subject, html) {
-  if (!config.email.apiKey || !to) return false;
+  if (!to || !activeProvider()) return false;
   try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.email.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: config.email.from,
-        to,
-        subject,
-        html,
-      }),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      console.warn(`[email] send failed (${res.status}): ${body}`);
-      return false;
-    }
+    if (config.email.brevoApiKey) await sendViaBrevo(to, subject, html);
+    else await sendViaResend(to, subject, html);
     return true;
   } catch (e) {
-    console.warn('[email] send error:', e.message);
+    console.warn(`[email] send failed via ${activeProvider()}:`, e.message);
+    // If both providers are configured, try the other one once.
+    try {
+      if (config.email.brevoApiKey && config.email.apiKey) {
+        await sendViaResend(to, subject, html);
+        return true;
+      }
+    } catch (e2) {
+      console.warn('[email] fallback provider failed:', e2.message);
+    }
     return false;
   }
 }
@@ -48,4 +99,4 @@ function notifyTemplate(title, message) {
   </div>`;
 }
 
-module.exports = { sendEmail, notifyTemplate };
+module.exports = { sendEmail, notifyTemplate, activeProvider, parseFrom };
