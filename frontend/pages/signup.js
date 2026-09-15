@@ -19,10 +19,12 @@ export default function Signup() {
     setBusy(true);
     setError('');
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
+        // Where the confirmation email link should send the user
+        emailRedirectTo: `${window.location.origin}/confirm`,
         data: {
           full_name: form.fullName,
           business_name: form.businessName,
@@ -34,7 +36,14 @@ export default function Signup() {
     setBusy(false);
     if (error) return setError(error.message);
 
-    // The DB trigger creates org + profile + settings automatically.
+    // If "Confirm email" is ON, no session yet — tell the user to check email.
+    if (!data?.session) {
+      return setError(
+        `📧 We've sent a confirmation link to ${form.email}. Please click it to activate your account, then log in.`
+      );
+    }
+
+    // Email confirmation OFF — session already exists, send them to onboarding.
     router.push('/onboarding');
   }
 
