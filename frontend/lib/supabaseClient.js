@@ -48,8 +48,24 @@ export async function fetchApi(path, options = {}) {
   );
 }
 
-/** Authenticated fetch helper — attaches Supabase JWT */
-export async function api(path, options = {}) {
+/* ---------- Tiny GET cache: dedupes parallel + repeat page loads ---------- */
+// The dashboard, settings, billing pages and the app shell all request
+// /api/org/me on mount — often simultaneously. Cache GETs for 30s and share
+// in-flight requests so N callers = 1 network call. Any non-GET clears it.
+const GET_CACHE_TTL_MS = 30_000;
+const getCache = new Map(); // key -> { at, data }
+const inFlight = new Map(); // key -> Promise
+
+/** Drop cached GET responses (all, or one path). */
+export function clearApiCache(path) {
+  if (path) {
+    for (const k of getCache.keys()) if (k.endsWith(path)) getCache.delete(k);
+  } else {
+    getCache.clear();
+  }
+}
+
+async function authedFetch(path, options = {}) {
   const { data: { session } } = await supabase.auth.getSession();
   const headers = {
     'Content-Type': 'application/json',
@@ -63,6 +79,32 @@ export async function api(path, options = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
+}
+
+/** Authenticated fetch helper — attaches Supabase JWT */
+export async function api(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
+  // Mutations bypass the cache and invalidate it, so the next GET is fresh.
+  if (method !== 'GET' || options.noCache) {
+    const data = await authedFetch(path, options);
+    clearApiCache();
+    return data;
+  }
+
+  const managing = getManagingOrg();
+  const key = (managing?.id || '') + path;
+
+  const hit = getCache.get(key);
+  if (hit && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.data;
+
+  // Share one request between concurrent callers (page mount bursts)
+  if (inFlight.has(key)) return inFlight.get(key);
+  const p = authedFetch(path, options)
+    .then((data) => { getCache.set(key, { at: Date.now(), data }); return data; })
+    .finally(() => inFlight.delete(key));
+  inFlight.set(key, p);
+  return p;
 }
 
 /* ---------- "Manage as client" (agency org switching) ---------- */

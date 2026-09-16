@@ -5,56 +5,58 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Short in-memory cache for GET /api/org/me. The dashboard, settings, billing
+// and the app shell all request it on load; recomputing 6 Supabase round-trips
+// for each is wasteful. 60s staleness on usage counters is acceptable.
+// Invalidated by any org mutation (settings/profile/channels PATCH).
+const meCache = new Map(); // orgId -> { at, payload }
+const ME_CACHE_TTL_MS = 60_000;
+
 /** GET /api/org/me — current org + settings + usage stats */
 router.get('/me', requireAuth, async (req, res) => {
-  const [{ data: org }, { data: settings }] = await Promise.all([
-    supabaseAdmin.from('organizations').select('*').eq('id', req.orgId).single(),
-    supabaseAdmin.from('settings').select('*').eq('organization_id', req.orgId).maybeSingle(),
-  ]);
+  const cached = meCache.get(req.orgId);
+  if (cached && Date.now() - cached.at < ME_CACHE_TTL_MS) {
+    return res.json({ ...cached.payload, cached: true });
+  }
 
   // Usage this month
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
+  const monthIso = monthStart.toISOString();
 
-  const { count: messages } = await supabaseAdmin
-    .from('usage_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', req.orgId)
-    .eq('event_type', 'message')
-    .gte('created_at', monthStart.toISOString());
+  // One round-trip wave instead of 6 sequential ones
+  const [orgRes, settingsRes, msgRes, bookRes, leadRes, docRes] = await Promise.all([
+    supabaseAdmin.from('organizations').select('*').eq('id', req.orgId).single(),
+    supabaseAdmin.from('settings').select('*').eq('organization_id', req.orgId).maybeSingle(),
+    supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
+      .eq('organization_id', req.orgId).eq('event_type', 'message').gte('created_at', monthIso),
+    supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
+      .eq('organization_id', req.orgId).eq('event_type', 'booking').gte('created_at', monthIso),
+    supabaseAdmin.from('leads').select('id', { count: 'exact', head: true })
+      .eq('organization_id', req.orgId),
+    supabaseAdmin.from('documents').select('id', { count: 'exact', head: true })
+      .eq('organization_id', req.orgId),
+  ]);
+
+  if (orgRes.error) return res.status(500).json({ error: orgRes.error.message });
 
   const config = require('../config');
-  const messageQuota = org?.monthly_message_quota ?? config.freeTierQuotas.messagesPerMonth;
-  const { count: bookings } = await supabaseAdmin
-    .from('usage_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', req.orgId)
-    .eq('event_type', 'booking')
-    .gte('created_at', monthStart.toISOString());
-
-  const { count: leadsCount } = await supabaseAdmin
-    .from('leads')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', req.orgId);
-
-  const { count: docs } = await supabaseAdmin
-    .from('documents')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', req.orgId);
-
-  res.json({
-    org,
-    settings,
+  const payload = {
+    org: orgRes.data,
+    settings: settingsRes.data,
     role: req.role,
     usage: {
-      messagesThisMonth: messages || 0,
-      messageQuota,
-      bookingsThisMonth: bookings || 0,
-      totalLeads: leadsCount || 0,
-      documents: docs || 0,
+      messagesThisMonth: msgRes.count || 0,
+      messageQuota: orgRes.data?.monthly_message_quota ?? config.freeTierQuotas.messagesPerMonth,
+      bookingsThisMonth: bookRes.count || 0,
+      totalLeads: leadRes.count || 0,
+      documents: docRes.count || 0,
     },
-  });
+  };
+
+  meCache.set(req.orgId, { at: Date.now(), payload });
+  res.json(payload);
 });
 
 /** PATCH /api/org/settings — update bot settings */
@@ -72,6 +74,7 @@ router.patch('/settings', requireAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+  meCache.delete(req.orgId);
   res.json({ settings: data });
 });
 /** GET /api/org/channels — messaging channel connection status */
@@ -118,6 +121,7 @@ router.post('/channels', requireAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+  meCache.delete(req.orgId);
   res.json({ ok: true, settings: data });
 });
 
@@ -133,6 +137,7 @@ router.delete('/channels/:channel', requireAuth, async (req, res) => {
     .eq('organization_id', req.orgId);
 
   if (error) return res.status(500).json({ error: error.message });
+  meCache.delete(req.orgId);
   res.json({ ok: true });
 });
 /** PATCH /api/org/profile — update org profile */
@@ -149,6 +154,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
+  meCache.delete(req.orgId);
   res.json({ org: data });
 });
 
