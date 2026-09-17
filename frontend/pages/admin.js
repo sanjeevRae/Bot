@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api, API_URL } from '../lib/supabaseClient';
+import AdminOrders from '../components/AdminOrders';
+import AdminInvoices from '../components/AdminInvoices';
+import AdminCompany from '../components/AdminCompany';
 
 /* Inline SVG icons (Lucide-style strokes) */
 const Icon = ({ children }) => (
@@ -20,6 +23,8 @@ export default function Admin() {
   const [quotaInput, setQuotaInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
+  const [tab, setTab] = useState('businesses');
+  const [invoiceToOpen, setInvoiceToOpen] = useState(null);
 
   async function load() {
     try {
@@ -105,7 +110,31 @@ export default function Admin() {
         </div>
       </div>
 
-      {/* Summary */}
+      {/* Tabs */}
+      <div className="mb-6 flex flex-wrap gap-1 border-b border-gray-200">
+        {[
+          ['businesses', 'Businesses'],
+          ['orders', 'Orders'],
+          ['invoices', 'Invoices'],
+          ['company', 'Company'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              tab === id
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-ink-500 hover:text-ink-900'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'businesses' && (
+        <>
+          {/* Summary */}
       <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
           ['Businesses', tenants.length, <BuildingIcon key="b" />],
@@ -238,9 +267,23 @@ export default function Admin() {
         </table>
       </div>
 
-      <p className="mt-4 text-xs text-ink-400">
-        Leave the field empty and save to reset a business back to the default free plan (100 messages/month).
-      </p>
+          <p className="mt-4 text-xs text-ink-400">
+            Leave the field empty and save to reset a business back to the default free plan (100 messages/month).
+          </p>
+        </>
+      )}
+
+      {tab === 'orders' && (
+        <AdminOrders
+          onInvoiced={(id) => { setInvoiceToOpen(id); setTab('invoices'); }}
+        />
+      )}
+
+      {tab === 'invoices' && (
+        <AdminInvoices openId={invoiceToOpen} onOpened={() => setInvoiceToOpen(null)} />
+      )}
+
+      {tab === 'company' && <AdminCompany />}
     </main>
   );
 }
