@@ -425,7 +425,7 @@ async function buildInvoicePdf(inv) {
     [customer.address, false],
     [customer.phone ? 'Phone: ' + customer.phone : '', false],
     [customer.tpin ? 'Customer TPIN: ' + customer.tpin : '', false],
-    [customer.panNo ? 'Customer PAN: ' + customer.panNo : '', false],
+    // No customer PAN line: the PAN on this invoice is Chitra Tech's (header + item rows).
     [customer.email, false],
   ].filter((p) => has(p[0]));
   const custH = 26 + custLines.reduce((h, p) => h + (p[1] ? 13 : 11), 0);
