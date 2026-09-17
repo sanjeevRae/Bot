@@ -58,6 +58,8 @@ const config = {
     brevoApiKey: process.env.BREVO_API_KEY || '',
     apiKey: process.env.RESEND_API_KEY || '',
     from: process.env.EMAIL_FROM || 'Chitra AI <onboarding@resend.dev>',
+    // Absolute URL of this backend — used to embed logo.webp in email HTML.
+    publicUrl: process.env.PUBLIC_BACKEND_URL || '',
   },
 
   // Cloudflare Turnstile (bot protection — free, unlimited)
