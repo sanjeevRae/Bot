@@ -21,7 +21,12 @@ alter table public.plan_requests add column if not exists amount_npr int;
 alter table public.plan_requests add column if not exists admin_notes text;
 alter table public.plan_requests add column if not exists updated_at timestamptz;
 
--- move any old labels onto the team's vocabulary, then lock it in
+-- Drop the old vocabulary FIRST. Moving rows onto the new labels while the
+-- old constraint is still in force fails with 23514.
+alter table public.plan_requests drop constraint if exists plan_requests_status_check;
+alter table public.plan_requests alter column status set default 'received';
+
+-- move any old labels onto the team's vocabulary
 update public.plan_requests set status = case status
   when 'new' then 'received'
   when 'contacted' then 'pending'
@@ -30,8 +35,10 @@ update public.plan_requests set status = case status
   else status end
 where status in ('new','contacted','won','lost');
 
-alter table public.plan_requests drop constraint if exists plan_requests_status_check;
-alter table public.plan_requests alter column status set default 'received';
+-- nothing unexpected may block the new constraint
+update public.plan_requests set status = 'received'
+where status is null or status not in ('received','pending','completed','cancelled');
+
 alter table public.plan_requests add constraint plan_requests_status_check
   check (status in ('received','pending','completed','cancelled'));
 
