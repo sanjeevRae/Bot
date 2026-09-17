@@ -1,12 +1,21 @@
 const supabaseAdmin = require('../lib/supabase');
 const { embedText } = require('./embeddings');
 const config = require('../config');
+const { fixMojibake } = require('../lib/textNormalize');
 
 /**
  * Ingest a document: chunk -> embed -> store sections.
  * Tenant-scoped: everything is filtered by organizationId.
  */
 async function ingestDocument({ organizationId, title, sourceType, url, text }) {
+  // Repair UTF-8/CP1252 mojibake coming from third-party sources (crawled sites,
+  // pasted text, imports) before it is stored, so the dashboard, knowledge base,
+  // bot answers and emails never display garbled characters.
+  // Safe by construction: text containing genuine Unicode (Devanagari, emoji,
+  // CJK, accented Latin) can never be altered by fixMojibake.
+  if (typeof title === 'string') title = fixMojibake(title);
+  if (typeof url === 'string') url = fixMojibake(url);
+  if (typeof text === 'string') text = fixMojibake(text);
   // Enforce free-tier document quota
   const { count } = await supabaseAdmin
     .from('documents')
@@ -34,7 +43,7 @@ async function ingestDocument({ organizationId, title, sourceType, url, text }) 
     const rows = chunks.map((content, i) => ({
       document_id: doc.id,
       organization_id: organizationId,
-      content,
+      content: fixMojibake(content),
       embedding: vectors[i],
     }));
 
