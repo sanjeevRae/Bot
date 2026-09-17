@@ -134,7 +134,7 @@ export default function AdminInvoices({ openId, onOpened }) {
     try {
       await persist();
       const d = await api("/api/admin/invoices/" + draft.id + "/send", { method: "POST", body: "{}" });
-      setNotice("Invoice emailed to " + d.to + ".");
+      setNotice("Invoice emailed to " + d.to + " with the PDF attached.");
       const fresh = await api("/api/admin/invoices/" + draft.id);
       setDraft(fresh.invoice);
       await loadList();

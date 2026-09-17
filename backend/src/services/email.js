@@ -18,7 +18,7 @@ function parseFrom(raw) {
   return { name: 'Chitra AI', email: value };
 }
 
-async function sendViaBrevo(to, subject, html) {
+async function sendViaBrevo(to, subject, html, attachments = []) {
   const sender = parseFrom(config.email.from);
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
@@ -32,6 +32,8 @@ async function sendViaBrevo(to, subject, html) {
       to: [{ email: to }],
       subject,
       htmlContent: html,
+      // Brevo wants base64 payloads under the singular key 'attachment'
+      ...(attachments.length ? { attachment: attachments.map((a) => ({ name: a.filename, content: a.content })) } : {}),
     }),
     signal: AbortSignal.timeout(8000),
   });
@@ -41,14 +43,20 @@ async function sendViaBrevo(to, subject, html) {
   }
 }
 
-async function sendViaResend(to, subject, html) {
+async function sendViaResend(to, subject, html, attachments = []) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${config.email.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: config.email.from, to, subject, html }),
+    body: JSON.stringify({
+      from: config.email.from,
+      to,
+      subject,
+      html,
+      ...(attachments.length ? { attachments: attachments.map((a) => ({ filename: a.filename, content: a.content })) } : {}),
+    }),
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
@@ -64,18 +72,18 @@ function activeProvider() {
   return null;
 }
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, attachments = []) {
   if (!to || !activeProvider()) return false;
   try {
-    if (config.email.brevoApiKey) await sendViaBrevo(to, subject, html);
-    else await sendViaResend(to, subject, html);
+    if (config.email.brevoApiKey) await sendViaBrevo(to, subject, html, attachments);
+    else await sendViaResend(to, subject, html, attachments);
     return true;
   } catch (e) {
     console.warn(`[email] send failed via ${activeProvider()}:`, e.message);
     // If both providers are configured, try the other one once.
     try {
       if (config.email.brevoApiKey && config.email.apiKey) {
-        await sendViaResend(to, subject, html);
+        await sendViaResend(to, subject, html, attachments);
         return true;
       }
     } catch (e2) {
