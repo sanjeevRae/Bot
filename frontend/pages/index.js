@@ -199,7 +199,7 @@ export default function Home() {
               <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                 <span className="text-sm font-medium text-ink-900">Chitra Assistant</span>
                 <span className="chip-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-ink-900"></span> Online
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Online
                 </span>
               </div>
               <div className="space-y-2.5 p-4">

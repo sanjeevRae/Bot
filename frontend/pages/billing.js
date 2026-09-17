@@ -69,7 +69,7 @@ export default function Billing() {
       </div>
 
       {status === 'success' && (
-        <div className="mb-6 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm font-medium text-ink-900">
+        <div className="mb-6 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
           ðŸŽ‰ Payment successful! Your plan is now active.
         </div>
       )}

@@ -212,8 +212,8 @@ function TestChat({ orgId }) {
       <div className="flex items-center gap-2.5 border-b border-white/70 px-5 py-3.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[11px] font-semibold text-white">C</div>
         <span className="text-sm font-medium text-ink-900">Test your bot</span>
-        <span className="ml-auto flex items-center gap-1 text-[11px] text-ink-700">
-          <span className="h-1.5 w-1.5 rounded-full bg-ink-900"></span> Live
+        <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live
         </span>
       </div>
       <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">

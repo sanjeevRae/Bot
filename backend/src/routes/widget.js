@@ -47,7 +47,7 @@ router.get('/widget.js', async (req, res) => {
     .eq('organization_id', orgId)
     .maybeSingle();
 
-  const brandColor = /^#[0-9a-fA-F]{6}$/.test(settings?.brand_color || '') ? settings.brand_color : '#18181b';
+  const brandColor = /^#[0-9a-fA-F]{6}$/.test(settings?.brand_color || '') ? settings.brand_color : '#059669';
   const botName = (settings?.bot_name || 'Chitra').trim().replace(/['"\\]/g, '').trim();
   const welcome = (settings?.welcome_message || 'Hi! How can I help you today?').trim().replace(/['"\\]/g, '').trim();
   const showBranding = !settings?.white_label;
@@ -308,19 +308,19 @@ body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;j
 #chat{width:100%;max-width:480px;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#fff}
 #msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .msg{max-width:85%;padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
-.bot{background:#f3f4f6;align-self:flex-start}.user{background:#18181b;color:#fff;align-self:flex-end}
+.bot{background:#f3f4f6;align-self:flex-start}.user{background:#6366f1;color:#fff;align-self:flex-end}
 .msg table{max-width:100%}
 .msg pre{max-width:100%}
 form{display:flex;border-top:1px solid #e5e7eb;background:#fff;padding-bottom:env(safe-area-inset-bottom)}
 input{flex:1;min-width:0;border:none;padding:16px;font-size:16px;outline:none}
-button{border:none;background:#18181b;color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
+button{border:none;background:#6366f1;color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
 h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bottom:1px solid #eee}
 </style></head><body><div id="chat">
 <h1>ðŸ’¬ ${org.name}</h1><div id="msgs"></div>
 <form><input id="in" placeholder="Type a message..." autocomplete="off" enterkeyhint="send"/><button>Send</button></form></div>
 <script>
 var msgs=document.getElementById('msgs'),sid='s_'+Math.random().toString(36).slice(2)+Date.now();
-var BRAND = '#18181b';
+var BRAND = '#6366f1';
   /* Markdown renderer v2 â€” headings, bold/italic, inline code, code blocks,
      links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
   function esc(s){

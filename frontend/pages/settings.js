@@ -76,10 +76,10 @@ export default function Settings() {
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Brand color</label>
               <div className="flex items-center gap-3">
-                <input type="color" value={settings.brand_color || '#18181b'}
+                <input type="color" value={settings.brand_color || '#059669'}
                   onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
                   className="h-9 w-14 cursor-pointer rounded-lg border border-gray-300 bg-white p-1" />
-                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#18181b'}</span>
+                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#059669'}</span>
               </div>
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function Settings() {
       <div className="sticky bottom-0 mt-8 flex items-center gap-3 border-t border-gray-200 bg-white py-4">
         <button onClick={save} className="btn-primary">Save changes</button>
         {saved && (
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-900">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
             Saved
           </span>
