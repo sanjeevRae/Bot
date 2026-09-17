@@ -184,6 +184,22 @@ function TestChat({ orgId }) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const boxRef = useRef(null);
+  const sessRef = useRef(null); // { id, token } — server-issued, never client-made
+
+  // Sessions come from the server (bound to this org via an HMAC token), so
+  // test chats are isolated per admin session — never a shared fixed id.
+  async function ensureSession() {
+    if (sessRef.current) return sessRef.current;
+    const res = await fetchApi('/api/chat/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId }),
+    });
+    if (!res.ok) throw new Error('session');
+    const s = await res.json();
+    sessRef.current = { id: s.sessionId, token: s.sessionToken };
+    return sessRef.current;
+  }
 
   async function send(e) {
     e.preventDefault();
@@ -193,11 +209,21 @@ function TestChat({ orgId }) {
     setMessages((m) => [...m, { who: 'user', text }]);
     setBusy(true);
     try {
-      const res = await fetchApi('/api/chat', {
+      let s = await ensureSession();
+      let res = await fetchApi('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, sessionId: 'dashboard-test', message: text }),
+        body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
       });
+      if (res.status === 403) {
+        sessRef.current = null;
+        s = await ensureSession();
+        res = await fetchApi('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
+        });
+      }
       const data = await res.json();
       setMessages((m) => [...m, { who: 'bot', text: data.reply || data.error || 'Error' }]);
     } catch {

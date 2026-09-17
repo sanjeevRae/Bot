@@ -52,6 +52,21 @@ const config = {
     webhookSecret: process.env.OPENWA_WEBHOOK_SECRET || '', // >= 16 chars; signs OpenWA webhook deliveries
   },
 
+  // Chat session isolation — HMAC secret binding visitor sessions to their org.
+  // Sessions are issued by POST /api/chat/session and verified on every message,
+  // so a visitor can never read or continue another visitor's conversation.
+  // Set SESSION_SECRET in production (>= 32 random chars). Fallbacks keep the
+  // app running: the OpenWA webhook secret, then a stable hash of the Supabase
+  // service key, then an ephemeral per-boot secret (sessions reset on restart).
+  session: {
+    secret:
+      process.env.SESSION_SECRET ||
+      process.env.OPENWA_WEBHOOK_SECRET ||
+      (process.env.SUPABASE_SERVICE_KEY
+        ? require('crypto').createHash('sha256').update(process.env.SUPABASE_SERVICE_KEY).digest('hex')
+        : require('crypto').randomBytes(32).toString('hex')),
+  },
+
   // Email notifications — Brevo preferred (same provider as Supabase auth
   // mail), Resend kept as a fallback. Set either key; Brevo wins if both.
   email: {

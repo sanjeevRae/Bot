@@ -12,10 +12,26 @@ export default function DemoWidget({ orgId }) {
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const boxRef = useRef(null);
+  const sessRef = useRef(null); // { id, token } — server-issued, never client-made
 
   useEffect(() => {
     if (open) boxRef.current?.scrollTo(0, boxRef.current.scrollHeight);
   }, [messages, open]);
+
+  // Sessions are issued by the server and bound to this org with an HMAC
+  // token, so this visitor's conversation stays isolated from everyone else's.
+  async function ensureSession() {
+    if (sessRef.current) return sessRef.current;
+    const res = await fetchApi('/api/chat/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgId }),
+    });
+    if (!res.ok) throw new Error('session');
+    const s = await res.json();
+    sessRef.current = { id: s.sessionId, token: s.sessionToken };
+    return sessRef.current;
+  }
 
   async function send(e) {
     e.preventDefault();
@@ -25,11 +41,21 @@ export default function DemoWidget({ orgId }) {
     setMessages((m) => [...m, { who: 'user', text }]);
     setBusy(true);
     try {
-      const res = await fetchApi('/api/chat', {
+      let s = await ensureSession();
+      let res = await fetchApi('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, sessionId: `landing_${Date.now()}`, message: text }),
+        body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
       });
+      if (res.status === 403) {
+        sessRef.current = null;
+        s = await ensureSession();
+        res = await fetchApi('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
+        });
+      }
       const data = await res.json();
       setMessages((m) => [...m, { who: 'bot', text: data.reply || data.error || 'Sorry, something went wrong.' }]);
     } catch {

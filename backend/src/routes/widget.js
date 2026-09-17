@@ -107,9 +107,38 @@ router.get('/widget.js', async (req, res) => {
   document.body.appendChild(launcher);
 
   var msgs = document.getElementById('chitra-msgs');
-  var sessionId = localStorage.getItem('chitra_session') ||
-    (localStorage.setItem('chitra_session','s_'+Math.random().toString(36).slice(2)+Date.now()),
-     localStorage.getItem('chitra_session'));
+  // ---- Session (server-issued, per-org, 24h) ----
+  // The id+token pair comes from the server, so this visitor can only ever
+  // continue their OWN conversation - never another visitor's.
+  var SKEY = "chitra_s_" + ORG_ID;
+  function loadS(){ try { var s = JSON.parse(localStorage.getItem(SKEY) || "null");
+    if (s && s.id && s.token && s.t && (Date.now() - s.t) < 86400000) return s; } catch(e){}
+    return null; }
+  function saveS(s){ try { localStorage.setItem(SKEY, JSON.stringify({ id: s.sessionId, token: s.sessionToken, t: Date.now() })); } catch(e){} }
+  function clearS(){ try { localStorage.removeItem(SKEY); } catch(e){} }
+  var sess = loadS();
+  function ensureS(){
+    if (sess) return Promise.resolve(sess);
+    return fetch(API + "/api/chat/session", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId: ORG_ID }) })
+      .then(function(r){ if (!r.ok) throw new Error("session"); return r.json(); })
+      .then(function(s){ sess = { id: s.sessionId, token: s.sessionToken }; saveS(s); return sess; });
+  }
+  function sendMsg(text){
+    return ensureS().then(function(s){
+      return fetch(API + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: ORG_ID, sessionId: s.id, sessionToken: s.token, message: text, cfTurnstile: (window.__chitraTurnstileToken || "") }) });
+    }).then(function(r){
+      if (r.status === 403) { // revoked/unknown session - start fresh, once
+        clearS(); sess = null;
+        return ensureS().then(function(s2){
+          return fetch(API + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orgId: ORG_ID, sessionId: s2.id, sessionToken: s2.token, message: text, cfTurnstile: (window.__chitraTurnstileToken || "") }) });
+        });
+      }
+      return r;
+    }).then(function(r){ return r.json(); });
+  }
 
   // Scroll isolation: when the cursor is over the chat panel, the wheel
   // scrolls the conversation — never the host website behind it.
@@ -266,16 +295,14 @@ router.get('/widget.js', async (req, res) => {
     msgs.appendChild(typing);
     msgs.scrollTop=msgs.scrollHeight;
 
-    fetch(API+'/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({orgId:ORG_ID,sessionId:sessionId,message:text,cfTurnstile:window.__chitraTurnstileToken||''})
-    }).then(function(r){return r.json();}).then(function(data){
+    sendMsg(text)
+    .then(function(data){
       typing.remove();
       addMsg(data.reply||data.error||'Sorry, something went wrong.','bot');
     }).catch(function(){
       typing.remove();
       addMsg('Connection error. Please try again.','bot');
+    });
     });
   };
 })();`);
@@ -319,7 +346,27 @@ h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bott
 <h1>💬 ${org.name}</h1><div id="msgs"></div>
 <form><input id="in" placeholder="Type a message..." autocomplete="off" enterkeyhint="send"/><button>Send</button></form></div>
 <script>
-var msgs=document.getElementById('msgs'),sid='s_'+Math.random().toString(36).slice(2)+Date.now();
+var msgs=document.getElementById("msgs");
+/* Server-issued session: this visitor can only continue their own chat. */
+var SKEY="chitra_s_${orgId}";
+function loadS(){try{var s=JSON.parse(localStorage.getItem(SKEY)||"null");
+if(s&&s.id&&s.token&&s.t&&(Date.now()-s.t)<86400000)return s;}catch(e){}return null;}
+function saveS(s){try{localStorage.setItem(SKEY,JSON.stringify({id:s.sessionId,token:s.sessionToken,t:Date.now()}));}catch(e){}}
+function clearS(){try{localStorage.removeItem(SKEY);}catch(e){}}
+var sess=loadS();
+function ensureS(){if(sess)return Promise.resolve(sess);
+return fetch("${backendUrl}/api/chat/session",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({orgId:"${orgId}"})})
+.then(function(r){if(!r.ok)throw new Error("session");return r.json()})
+.then(function(s){sess={id:s.sessionId,token:s.sessionToken};saveS(s);return sess;});}
+function sendMsg(text){return ensureS().then(function(s){
+return fetch("${backendUrl}/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({orgId:"${orgId}",sessionId:s.id,sessionToken:s.token,message:text})});
+}).then(function(r){if(r.status===403){clearS();sess=null;
+return ensureS().then(function(s2){
+return fetch("${backendUrl}/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+body:JSON.stringify({orgId:"${orgId}",sessionId:s2.id,sessionToken:s2.token,message:text})});});}
+return r;}).then(function(r){return r.json();});}
 var BRAND = '#6366f1';
   /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,
      links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
@@ -450,10 +497,9 @@ inEl.addEventListener('focus',function(){setTimeout(function(){msgs.scrollTop=ms
 inEl.addEventListener('input',function(){msgs.scrollTop=msgs.scrollHeight;});
 document.querySelector('form').onsubmit=function(e){e.preventDefault();
 var i=document.getElementById('in'),t=i.value.trim();if(!t)return;i.value='';add(t,'user');
-fetch('${backendUrl}/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({orgId:'${orgId}',sessionId:sid,message:t})})
-.then(function(r){return r.json()}).then(function(d){add(d.reply||d.error||'Error','bot')}).catch(function(){add('Connection error. Please try again.','bot')});
+sendMsg(t)
 };
+.then(function(d){add(d.reply||d.error||'Error','bot')}).catch(function(){add('Connection error. Please try again.','bot')});
 </script></body></html>`);
 });
 
