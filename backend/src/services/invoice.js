@@ -183,7 +183,7 @@ function renderCustomer(customer) {
     detail('Billing Address', customer.address),
     detail('Phone', customer.phone),
     detail('Customer TPIN', customer.tpin),
-    detail('Customer PAN', customer.panNo),
+    // the company PAN prints in the header above the invoice number
     detail('Email', customer.email),
   ].join('');
   return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:16px">'

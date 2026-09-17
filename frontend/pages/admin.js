@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { api, API_URL } from '../lib/supabaseClient';
+import { api, fetchApi, supabase } from '../lib/supabaseClient';
 import AdminOrders from '../components/AdminOrders';
 import AdminInvoices from '../components/AdminInvoices';
 import AdminCompany from '../components/AdminCompany';
@@ -23,6 +23,7 @@ export default function Admin() {
   const [quotaInput, setQuotaInput] = useState('');
   const [saving, setSaving] = useState(false);
   const [planBusy, setPlanBusy] = useState(false);
+  const [exporting, setExporting] = useState('');
   const [tab, setTab] = useState('businesses');
   const [invoiceToOpen, setInvoiceToOpen] = useState(null);
 
@@ -35,6 +36,37 @@ export default function Admin() {
     }
   }
   useEffect(() => { load(); }, []);
+
+  // Plain links cannot carry the Authorization header, so the CSV is fetched
+  // with the admin token and saved as a file download.
+  async function downloadCsv(type) {
+    setExporting(type || 'tenants');
+    setError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetchApi('/api/admin/export' + (type ? '?type=' + type : ''), {
+        headers: { Authorization: 'Bearer ' + ((session && session.access_token) || '') },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Export failed (' + res.status + ')');
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') || '';
+      const named = /filename=?"?([^";]+)"?/.exec(cd);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = named ? named[1] : 'chitra-' + (type || 'tenants') + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e.message);
+    }
+    setExporting('');
+  }
 
   const filtered = useMemo(() => {
     if (!tenants) return [];
@@ -101,12 +133,12 @@ export default function Admin() {
           <h1 className="text-3xl font-semibold tracking-tight text-ink-900">Admin</h1>
         </div>
         <div className="flex gap-2">
-          <a href={`${API_URL}/api/admin/export`} target="_blank" rel="noreferrer" className="btn-outline !py-2 text-xs">
-            Export tenants CSV
-          </a>
-          <a href={`${API_URL}/api/admin/export?type=messages`} target="_blank" rel="noreferrer" className="btn-outline !py-2 text-xs">
-            Export usage CSV
-          </a>
+          <button onClick={() => downloadCsv()} disabled={exporting !== ''} className="btn-outline !py-2 text-xs">
+            {exporting === 'tenants' ? 'Preparing...' : 'Export tenants CSV'}
+          </button>
+          <button onClick={() => downloadCsv('messages')} disabled={exporting !== ''} className="btn-outline !py-2 text-xs">
+            {exporting === 'messages' ? 'Preparing...' : 'Export usage CSV'}
+          </button>
         </div>
       </div>
 

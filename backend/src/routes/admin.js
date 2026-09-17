@@ -549,7 +549,6 @@ router.post('/invoices', async (req, res) => {
         address: '',
         phone: order.phone || '',
         tpin: '',
-        panNo: '',
         email: order.email || '',
       };
     }
