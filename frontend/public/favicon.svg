@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!--
+    Favicon wrapper: scales logo.webp ~1.4x inside the 32x32 canvas so the
+    mark fills the browser tab icon instead of looking lost in whitespace.
+    Browsers without SVG-favicon support fall back to the webp <link>.
+  -->
+  <image href="logo.webp" x="-6" y="-6" width="44" height="44" preserveAspectRatio="xMidYMid meet" />
+</svg>
