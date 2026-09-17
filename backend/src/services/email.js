@@ -1,11 +1,11 @@
-const config = require('../config');
+﻿const config = require('../config');
 
 /**
  * Email notifications. Two providers, HTTP APIs only (no extra deps):
- *   1. Brevo  (https://brevo.com)  — used when BREVO_API_KEY is set.
+ *   1. Brevo  (https://brevo.com)  â€” used when BREVO_API_KEY is set.
  *      Brevo is the same provider Supabase uses for confirmation emails,
  *      so the sender domain is already verified there.
- *   2. Resend (https://resend.com) — fallback when only RESEND_API_KEY is set.
+ *   2. Resend (https://resend.com) â€” fallback when only RESEND_API_KEY is set.
  * Falls back silently when neither is configured so the chat pipeline never
  * breaks on notification failure.
  */
@@ -89,7 +89,7 @@ async function sendEmail(to, subject, html) {
 function notifyTemplate(title, message) {
   const logo = config.email.publicUrl
     ? `<img src="${config.email.publicUrl}/logo.webp" alt="Chitra AI" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />`
-    : `<span style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>`;
+    : `<span style="background:#18181b;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>`;
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
