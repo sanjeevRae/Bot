@@ -4,6 +4,7 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="icon" href="/logo.webp" type="image/webp" />
         <link rel="apple-touch-icon" href="/logo.webp" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
