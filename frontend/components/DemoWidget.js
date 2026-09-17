@@ -92,7 +92,7 @@ export default function DemoWidget({ orgId }) {
         aria-label="Open chat"
         className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-white shadow-lg ring-1 ring-gray-200 transition-transform hover:scale-105"
       >
-        <img src="/logo.webp" alt="Chat with us" className="h-full w-full object-cover" />
+        <img src="/logo.png" alt="Chat with us" className="h-full w-full object-cover" />
       </button>
     </>
   );

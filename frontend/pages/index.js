@@ -383,7 +383,7 @@ export default function Home() {
           {/* Brand — full width above the link row */}
           <div className="mb-10">
             <div className="mb-4 flex items-center gap-2.5">
-              <img src="/logo.webp" alt="Chitra AI logo" className="h-8 w-8 rounded-lg object-contain" />
+              <img src="/logo.png" alt="Chitra AI logo" className="h-8 w-8 rounded-lg object-contain" />
               <span className="text-[15px] font-semibold tracking-tight text-ink-900">Chitra AI</span>
             </div>
             <p className="mb-4 text-sm text-ink-500">Your business, answered 24/7.</p>

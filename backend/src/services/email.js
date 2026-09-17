@@ -88,7 +88,7 @@ async function sendEmail(to, subject, html) {
 /** Wrap a plain-text notification in a minimal branded template. */
 function notifyTemplate(title, message) {
   const logo = config.email.publicUrl
-    ? `<img src="${config.email.publicUrl}/logo.webp" alt="Chitra AI" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />`
+    ? `<img src="${config.email.publicUrl}/logo.png" alt="Chitra AI" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />`
     : `<span style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>`;
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
