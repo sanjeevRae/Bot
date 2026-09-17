@@ -277,7 +277,7 @@ export default function AdminInvoices({ openId, onOpened }) {
               <Field label="Email" type="email" value={customer.email} onChange={(v) => upCustomer({ email: v })} />
               <Field label="Phone" value={customer.phone} onChange={(v) => upCustomer({ phone: v })} />
               <Field label="Customer TPIN" value={customer.tpin} onChange={(v) => upCustomer({ tpin: v })} />
-              // the PAN printed on the invoice is Chitra Tech's (header + item rows)
+              {/* No customer PAN field: the PAN printed on the invoice is Chitra Tech's (header + item rows). */}
               <label className="block sm:col-span-2">
                 <span className="mb-1 block text-[11px] font-medium text-ink-600">Billing address</span>
                 <textarea rows="2" className="input-base resize-none text-[13px]" value={customer.address || ""} onChange={(e) => upCustomer({ address: e.target.value })} />

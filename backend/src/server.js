@@ -37,6 +37,10 @@ const corsOriginMatchers = config.corsOrigins.map((o) =>
 const strictCors = cors({
   credentials: true,
   origin: config.corsOrigins.includes('*') ? true : corsOriginMatchers,
+  // Browsers only expose a small set of response headers to JS unless the
+  // server opts in. The admin CSV export reads Content-Disposition to name the
+  // downloaded file, so expose it (harmless: it carries only the filename).
+  exposedHeaders: ['Content-Disposition'],
 });
 // Helmet's default Cross-Origin-Resource-Policy: same-origin blocks customer
 // sites from loading widget.js / logo.png cross-origin. Relax it (and COEP)
