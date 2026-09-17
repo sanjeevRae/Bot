@@ -8,6 +8,27 @@ function pdfLib() {
   return PDFDocument || null;
 }
 
+/** Remote images are fetched to buffers for pdfkit (6s timeout, silent skip). */
+const imageCache = new Map();
+async function fetchImage(url) {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) return null;
+  if (imageCache.has(url)) return imageCache.get(url);
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const type = res.headers.get('content-type') || '';
+    if (!/image\//.test(type)) throw new Error('not an image: ' + type);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) throw new Error('empty image');
+    imageCache.set(url, buf);
+    return buf;
+  } catch (e) {
+    console.warn('[invoice] image fetch failed (' + url + '): ' + e.message);
+    imageCache.set(url, null);
+    return null;
+  }
+}
+
 /**
  * Invoice helpers: totals, amount in words, invoice numbering and the printable
  * HTML document. The same HTML is used for the admin preview and the email, so
@@ -134,6 +155,7 @@ function renderHeader(company, inv) {
   ].filter((l) => Array.isArray(l) ? l.some(has) : has(l)).map((l) => (Array.isArray(l) ? l[0] : l)).filter(has);
 
   const meta = [
+    ['PAN No.', company.panNo],
     ['Invoice No.', inv.invoiceNo],
     ['Transaction Date', inv.transactionDate],
     ['Reprint Date', inv.reprintDate],
@@ -309,15 +331,25 @@ function renderInvoiceHtml(inv) {
  * attachment instead of only a web page in the email body.
  * Returns a Buffer, or null when pdfkit is not installed.
  */
-function buildInvoicePdf(inv) {
+async function buildInvoicePdf(inv) {
   const Lib = pdfLib();
   if (!Lib) return null;
+  const company = inv.company || {};
+
+  // pdfkit draws from buffers, so remote images are fetched up-front: in
+  // parallel, with a short timeout, silently skipped when missing.
+  const [logoBuf, qrBuf, sigBuf, stampBuf] = await Promise.all([
+    fetchImage(company.logoUrl),
+    fetchImage(inv.paymentQrUrl || company.paymentQrUrl),
+    fetchImage(company.signatureUrl),
+    fetchImage(company.stampUrl),
+  ]);
+  const images = { logo: logoBuf, qr: qrBuf, signature: sigBuf, stamp: stampBuf };
+
   const doc = new Lib({ size: 'A4', margin: 36, bufferPages: true });
   const chunks = [];
   doc.on('data', (c) => chunks.push(c));
   const done = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
-
-  const company = inv.company || {};
   const customer = inv.customer || {};
   const items = normalizeItems(inv.items);
   const totals = computeTotals(items, inv.discount, inv.serviceCharge);
@@ -345,12 +377,9 @@ function buildInvoicePdf(inv) {
 
   // ---------- header ----------
   const top = 40;
-  const logoIsUrl = typeof company.logoUrl === 'string' && /^https?:\/\//.test(company.logoUrl);
-  let drewLogo = false;
-  if (logoIsUrl) {
-    try { doc.image(company.logoUrl, L, top, { fit: [52, 52] }); drewLogo = true; } catch { drewLogo = false; }
-  }
-  if (!drewLogo) {
+  if (images.logo) {
+    doc.image(images.logo, L, top, { fit: [52, 52] });
+  } else {
     doc.roundedRect(L, top, 52, 52, 8).fill('#059669');
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(24).text('C', L, top + 13, { width: 52, align: 'center' });
   }
@@ -367,6 +396,7 @@ function buildInvoicePdf(inv) {
     cy += 11;
   });
   const meta = [
+    ['PAN No.', company.panNo],
     ['Invoice No.', inv.invoiceNo],
     ['Transaction Date', inv.transactionDate],
     ['Reprint Date', inv.reprintDate],
@@ -517,7 +547,7 @@ function buildInvoicePdf(inv) {
     company.bankDetails ? 'Bank: ' + company.bankDetails : '',
     company.paymentInstructions || '',
   ].filter(has);
-  const qrIsUrl = typeof (inv.paymentQrUrl || company.paymentQrUrl) === 'string' && /^https?:\/\//.test(inv.paymentQrUrl || company.paymentQrUrl || '');
+  const qrIsUrl = images.qr !== null;
   const payH = 22 + payLines.reduce((h, t) => h + doc.heightOfString(t, { width: qrIsUrl ? W - 150 : W - 24, fontSize: 8 }) + 3, 0);
   if (payLines.length || qrIsUrl) {
     need(payH + 8);
@@ -527,8 +557,8 @@ function buildInvoicePdf(inv) {
     label('PAYMENT DETAILS', L + 12, pY + 8);
     let py = pY + 22;
     payLines.forEach((t) => { py = para(t, L + 12, py, qrIsUrl ? W - 150 : W - 24, { size: 8 }) + 3; });
-    if (qrIsUrl) {
-      try { doc.image(inv.paymentQrUrl || company.paymentQrUrl, R - 116, pY + 12, { fit: [104, 104] }); } catch { /* skip */ }
+    if (images.qr) {
+      doc.image(images.qr, R - 116, pY + 12, { fit: [104, 104] });
     }
     doc.y = pY + payH + 12;
   }
@@ -551,13 +581,12 @@ function buildInvoicePdf(inv) {
   // ---------- signature + stamp ----------
   need(90);
   const sigY = Math.max(doc.y + 14, bottom - 74);
-  const sig = has(company.signatureUrl);
-  if (sig) { try { doc.image(company.signatureUrl, L, sigY - 42, { fit: [120, 40] }); } catch { /* skip */ } }
+  if (images.signature) { doc.image(images.signature, L, sigY - 42, { fit: [120, 40] }); }
   doc.moveTo(L, sigY).lineTo(L + 180, sigY).lineWidth(0.8).strokeColor('#9ca3af').stroke();
   label('Authorised Signature', L, sigY + 4);
   strong(company.name || '', L, sigY + 15, 220);
-  if (has(company.stampUrl)) {
-    try { doc.image(company.stampUrl, R - 92, sigY - 58, { fit: [90, 90] }); } catch { /* skip */ }
+  if (images.stamp) {
+    doc.image(images.stamp, R - 92, sigY - 58, { fit: [90, 90] });
   }
   label('Company Stamp', R - 92, sigY + 18, 92, 'center');
 
