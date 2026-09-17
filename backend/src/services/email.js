@@ -85,8 +85,21 @@ async function sendEmail(to, subject, html) {
   }
 }
 
-/** Wrap a plain-text notification in a minimal branded template. */
-function notifyTemplate(title, message) {
+/** Escape a value before embedding it in email HTML. */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Wrap ready-made body HTML in the branded email shell. Use this when the body
+ * is trusted HTML; use notifyTemplate() for plain text (it escapes for you).
+ */
+function brandedEmail(title, bodyHtml) {
   const logo = config.email.publicUrl
     ? `<img src="${config.email.publicUrl}/logo.png" alt="Chitra AI" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />`
     : `<span style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>`;
@@ -97,9 +110,17 @@ function notifyTemplate(title, message) {
       <strong style="font-size:15px;color:#111827">Chitra AI</strong>
     </div>
     <h2 style="margin:0 0 8px;font-size:17px;color:#111827">${title}</h2>
-    <p style="margin:0;font-size:14px;line-height:1.6;color:#374151">${message}</p>
+    ${bodyHtml}
     <p style="margin-top:20px;font-size:11px;color:#9ca3af">Sent by your Chitra AI assistant</p>
   </div>`;
 }
 
-module.exports = { sendEmail, notifyTemplate, activeProvider, parseFrom };
+/** Wrap plain text in the branded shell. The text is HTML-escaped. */
+function notifyTemplate(title, message) {
+  return brandedEmail(
+    title,
+    `<p style="margin:0;font-size:14px;line-height:1.6;color:#374151">${escapeHtml(message)}</p>`
+  );
+}
+
+module.exports = { sendEmail, notifyTemplate, brandedEmail, escapeHtml, activeProvider, parseFrom };
