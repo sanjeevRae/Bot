@@ -3,20 +3,61 @@ const supabaseAdmin = require('../lib/supabase');
 const { retrieveContext, trackUsage } = require('../services/rag');
 const { buildSystemPrompt, getToolSchemas, runChatTurn } = require('../services/groq');
 const { createToolExecutor } = require('../services/tools');
+const { issueSession, verifySession } = require('../lib/sessionToken');
 const config = require('../config');
 
 const router = express.Router();
 
 /**
+ * POST /api/chat/session
+ * Public. Issues a fresh, unguessable session bound to an org, with an HMAC
+ * token the client must present on every message. This is the ONLY way a
+ * visitor gets a session id — client-invented ids are rejected by /api/chat.
+ * Body: { orgId }
+ */
+router.post('/session', async (req, res) => {
+  try {
+    const { orgId } = req.body || {};
+    if (!orgId) return res.status(400).json({ error: 'orgId is required' });
+
+    const { data: org, error } = await supabaseAdmin
+      .from('organizations')
+      .select('id')
+      .eq('id', orgId)
+      .single();
+    if (error || !org) return res.status(404).json({ error: 'Business not found' });
+
+    res.json(issueSession(orgId));
+  } catch (err) {
+    console.error('Session route error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * POST /api/chat
- * Public endpoint used by the embeddable widget & test chat.
- * Body: { orgId, sessionId, message, channel? }
+ * Public endpoint used by the embeddable widget, the /bot page & test chat.
+ * Body: { orgId, sessionId, sessionToken, message, channel? }
+ *
+ * The (sessionId, sessionToken) pair must have been issued by /api/chat/session
+ * for this exact org — this is what prevents visitor B from continuing
+ * visitor A's conversation (requirement: strict per-session isolation).
  */
 router.post('/', async (req, res) => {
   try {
-    const { orgId, sessionId, message, channel = 'web' } = req.body;
+    const { orgId, sessionId, sessionToken, message, channel = 'web' } = req.body;
     if (!orgId || !sessionId || !message) {
       return res.status(400).json({ error: 'orgId, sessionId and message are required' });
+    }
+
+    // ---- Session ownership (server-side verification, never trusted from client) ----
+    const session = verifySession(orgId, sessionId, sessionToken);
+    if (!session.ok) {
+      return res.status(403).json({
+        error: 'Invalid or expired chat session. Please reload the chat.',
+        code: session.reason, // invalid_session_id | missing_token | token_mismatch
+        new_session: true,
+      });
     }
 
     // Load org + settings (public info only)
