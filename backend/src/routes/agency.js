@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const supabaseAdmin = require('../lib/supabase');
 const config = require('../config');
 const { requireAuth } = require('../middleware/auth');
@@ -30,7 +30,7 @@ async function requireAgency(req, res, next) {
 }
 
 /**
- * GET /api/agency/clients — list client orgs with usage summary.
+ * GET /api/agency/clients â€” list client orgs with usage summary.
  */
 router.get('/clients', requireAgency, async (req, res) => {
   const monthStart = new Date();
@@ -52,7 +52,7 @@ router.get('/clients', requireAgency, async (req, res) => {
 
   let { data: clients, error } = await runQuery(withEmail);
   if (error && /contact_email/i.test(error.message || '')) {
-    // migration_v5_agency_invite.sql not run yet — fall back gracefully
+    // migration_v5_agency_invite.sql not run yet â€” fall back gracefully
     ({ data: clients, error } = await runQuery(withoutEmail));
   }
 
@@ -77,8 +77,8 @@ router.get('/clients', requireAgency, async (req, res) => {
 });
 
 /**
- * POST /api/agency/clients — create a client workspace.
- * Body: { name, industry?, email? } — email optionally sends the client an
+ * POST /api/agency/clients â€” create a client workspace.
+ * Body: { name, industry?, email? } â€” email optionally sends the client an
  * invite to their own dashboard.
  */
 router.post('/clients', requireAgency, async (req, res) => {
@@ -119,7 +119,7 @@ router.post('/clients', requireAgency, async (req, res) => {
 });
 
 /**
- * DELETE /api/agency/clients/:id — remove a client workspace.
+ * DELETE /api/agency/clients/:id â€” remove a client workspace.
  */
 router.delete('/clients/:id', requireAgency, async (req, res) => {
   let query = supabaseAdmin
@@ -136,7 +136,7 @@ router.delete('/clients/:id', requireAgency, async (req, res) => {
 });
 
 /**
- * POST /api/agency/clients/:id/invite — invite a client to their dashboard.
+ * POST /api/agency/clients/:id/invite â€” invite a client to their dashboard.
  * Body: { email }. Creates the auth user (Supabase invite email) and links
  * their profile to this client workspace.
  */
@@ -174,14 +174,14 @@ async function setContactEmail(orgId, email) {
     .update({ contact_email: email })
     .eq('id', orgId);
   if (error && /contact_email/i.test(error.message || '')) {
-    console.warn('[agency] contact_email column missing — run migration_v5_agency_invite.sql');
+    console.warn('[agency] contact_email column missing â€” run migration_v5_agency_invite.sql');
   }
 }
 
 /**
  * Invite a user to a client workspace.
- *  - New email      → Supabase invite email (user clicks → session → dashboard)
- *  - Existing user  → branded magic-link email via Resend (or link fallback)
+ *  - New email      â†’ Supabase invite email (user clicks â†’ session â†’ dashboard)
+ *  - Existing user  â†’ branded magic-link email via Resend (or link fallback)
  */
 async function inviteClientUser(email, clientOrg) {
   const siteUrl = config.payments.frontendUrl; // PUBLIC_FRONTEND_URL
@@ -199,7 +199,7 @@ async function inviteClientUser(email, clientOrg) {
     return { sent: true, mode: 'invite' };
   }
 
-  // Supabase rejects invites for existing users — handle that gracefully
+  // Supabase rejects invites for existing users â€” handle that gracefully
   const msg = inviteErr?.message || 'Invite failed';
   if (!/already.*registered|already.*exists|user.*exists/i.test(msg)) throw new Error(msg);
 
@@ -234,12 +234,12 @@ async function inviteClientUser(email, clientOrg) {
   const emailSvc = require('../services/email');
   const sent = await emailSvc.sendEmail(
     email,
-    `Sign in to ${clientOrg.name} — Chitra AI`,
+    `Sign in to ${clientOrg.name} â€” Chitra AI`,
     emailSvc.notifyTemplate(
       'Your AI assistant workspace is ready',
       `<p>You have been invited to manage <strong>${clientOrg.name}</strong>'s AI assistant.</p>
        <p style="margin:20px 0">
-         <a href="${actionLink}" style="background:#059669;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open my dashboard</a>
+         <a href="${actionLink}" style="background:#18181b;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open my dashboard</a>
        </p>
        <p style="font-size:12px;color:#6b7280">Or paste this link into your browser:<br>${actionLink}</p>`
     )
