@@ -69,11 +69,20 @@ function computeTotals(items, discount, serviceCharge) {
 /** Sequential number per year: INV-2026-0001 */
 async function nextInvoiceNo() {
   const prefix = 'INV-' + new Date().getFullYear() + '-';
-  const { count } = await supabaseAdmin
+  // Highest number in use (zero-padded, so lexical order is numeric order).
+  // Deriving from the maximum rather than a row count keeps numbers unique even
+  // after an invoice is deleted.
+  const { data: latest } = await supabaseAdmin
     .from('invoices')
-    .select('id', { count: 'exact', head: true })
-    .like('invoice_no', prefix + '%');
-  let seq = (count || 0) + 1;
+    .select('invoice_no')
+    .like('invoice_no', prefix + '%')
+    .order('invoice_no', { ascending: false })
+    .limit(1);
+  let seq = 1;
+  if (latest && latest[0] && latest[0].invoice_no) {
+    const parsed = parseInt(String(latest[0].invoice_no).slice(prefix.length), 10);
+    if (Number.isFinite(parsed)) seq = parsed + 1;
+  }
   for (let attempt = 0; attempt < 30; attempt++) {
     const candidate = prefix + String(seq).padStart(4, '0');
     const { data } = await supabaseAdmin.from('invoices').select('id').eq('invoice_no', candidate).maybeSingle();
