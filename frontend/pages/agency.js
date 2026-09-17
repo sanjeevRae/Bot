@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '../lib/supabaseClient';
 
@@ -56,9 +56,9 @@ export default function Agency() {
     setBusy(true); setError(''); setSuccess('');
     try {
       const d = await api(`/api/agency/clients/${id}/invite`, { method: 'POST', body: JSON.stringify({ email }) });
-      if (d.sent && d.mode === 'invite') setSuccess(`Invite email sent to ${email} â€” they can set up their dashboard.`);
+      if (d.sent && d.mode === 'invite') setSuccess(`Invite email sent to ${email} — they can set up their dashboard.`);
       else if (d.sent && d.mode === 'magiclink') setSuccess(`Sign-in link emailed to ${email}.`);
-      else if (d.link) setSuccess(`Email not configured â€” copy this sign-in link for ${clientName}: ${d.link}`);
+      else if (d.link) setSuccess(`Email not configured — copy this sign-in link for ${clientName}: ${d.link}`);
       else setSuccess(d.error || 'Invite processed.');
       setInvite(null);
       await load();
@@ -98,19 +98,19 @@ export default function Agency() {
         <div className="flex-1">
           <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Client email (optional)</label>
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="owner@bloomsalon.com â€” sends an invite" className="input-base !py-2 text-sm" />
+            placeholder="owner@bloomsalon.com — sends an invite" className="input-base !py-2 text-sm" />
         </div>
         <button disabled={busy} className="btn-primary !py-2.5 sm:w-auto">Add client</button>
       </form>
 
       {/* Client list */}
       {!clients ? (
-        <p className="py-10 text-center text-sm text-ink-400">Loadingâ€¦</p>
+        <p className="py-10 text-center text-sm text-ink-400">Loading…</p>
       ) : clients.length === 0 ? (
         <div className="card p-12 text-center">
           <p className="text-sm font-medium text-ink-700">No clients yet</p>
           <p className="mx-auto mt-1 max-w-sm text-sm text-ink-400">
-            Add your first client above â€” each gets their own workspace with a Pro-level bot.
+            Add your first client above — each gets their own workspace with a Pro-level bot.
           </p>
         </div>
       ) : (
@@ -131,7 +131,7 @@ export default function Agency() {
                 <tr key={c.id} className="transition-colors hover:bg-gray-50">
                   <td className="px-5 py-3.5">
                     <p className="font-medium text-ink-900">{c.name}</p>
-                    <p className="text-xs text-ink-400">{c.industry || 'â€”'}</p>
+                    <p className="text-xs text-ink-400">{c.industry || '—'}</p>
                     <p className="text-xs text-ink-400">{c.contact_email || 'No client login yet'}</p>
                   </td>
                   <td className="px-5 py-3.5 text-ink-700">{c.messagesThisMonth}</td>
@@ -139,7 +139,7 @@ export default function Agency() {
                   <td className="px-5 py-3.5 text-ink-700">{c.totalLeads}</td>
                   <td className="px-5 py-3.5">
                     <Link href={`/dashboard?org=${c.id}`} className="btn-link !text-xs">
-                      Manage â†’
+                      Manage →
                     </Link>
                   </td>
                   <td className="px-5 py-3.5 text-right">

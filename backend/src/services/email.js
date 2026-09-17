@@ -1,11 +1,11 @@
-﻿const config = require('../config');
+const config = require('../config');
 
 /**
  * Email notifications. Two providers, HTTP APIs only (no extra deps):
- *   1. Brevo  (https://brevo.com)  â€” used when BREVO_API_KEY is set.
+ *   1. Brevo  (https://brevo.com)  — used when BREVO_API_KEY is set.
  *      Brevo is the same provider Supabase uses for confirmation emails,
  *      so the sender domain is already verified there.
- *   2. Resend (https://resend.com) â€” fallback when only RESEND_API_KEY is set.
+ *   2. Resend (https://resend.com) — fallback when only RESEND_API_KEY is set.
  * Falls back silently when neither is configured so the chat pipeline never
  * breaks on notification failure.
  */
