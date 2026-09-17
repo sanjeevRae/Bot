@@ -9,6 +9,8 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false); // showing the reset-request form
+  const [sent, setSent] = useState(false); // reset email dispatched
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,6 +22,70 @@ export default function Login() {
     router.push('/dashboard');
   }
 
+  async function handleForgot(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    // Supabase emails a "reset password" link that lands on /reset-password,
+    // where the visitor picks a new password.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) return setError(error.message);
+    setSent(true);
+  }
+
+  // ---- Forgot-password view ----
+  if (forgot) {
+    return (
+      <main className="flex min-h-[calc(100vh-57px)] items-center justify-center bg-gray-50 px-5 py-16">
+        <div className="w-full max-w-sm">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-5 h-11 w-11 overflow-hidden rounded-xl bg-white ring-1 ring-gray-200">
+              <img src="/logo.png" alt="Chitra AI logo" className="h-full w-full object-contain" />
+            </div>
+            <h1 className="h-display text-2xl">{sent ? 'Check your email' : 'Reset your password'}</h1>
+            <p className="mt-1.5 text-sm text-ink-500">
+              {sent
+                ? <>We sent a set-new-password link to <span className="font-medium text-ink-700">{email}</span>. It expires shortly — check your spam folder too.</>
+                : 'Enter your account email and we\u2019ll send you a link to set a new password.'}
+            </p>
+          </div>
+
+          {!sent && (
+            <div className="card p-7 sm:p-8">
+              <form onSubmit={handleForgot} className="space-y-4">
+                <div>
+                  <label htmlFor="reset-email" className="mb-1.5 block text-[13px] font-medium text-ink-700">Email</label>
+                  <input
+                    id="reset-email"
+                    type="email" required autoComplete="email" placeholder="you@company.com" value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-base"
+                  />
+                </div>
+                {error && (
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-600">{error}</div>
+                )}
+                <button disabled={busy} className="btn-primary w-full py-2.5">
+                  {busy ? 'Sending link…' : 'Send reset link'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          <p className="mt-6 text-center text-sm text-ink-500">
+            <button onClick={() => { setForgot(false); setError(''); setSent(false); }} className="font-medium text-brand-600 transition-colors hover:text-brand-700">
+              ← Back to login
+            </button>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // ---- Default login view ----
   return (
     <main className="flex min-h-[calc(100vh-57px)] items-center justify-center bg-gray-50 px-5 py-16">
       <div className="w-full max-w-sm">
@@ -43,6 +109,13 @@ export default function Login() {
             <div>
               <div className="mb-1.5 flex items-center justify-between">
                 <label htmlFor="password" className="block text-[13px] font-medium text-ink-700">Password</label>
+                <button
+                  type="button"
+                  onClick={() => { setForgot(true); setError(''); setSent(false); }}
+                  className="text-[12px] font-medium text-brand-600 transition-colors hover:text-brand-700"
+                >
+                  Forgot password?
+                </button>
               </div>
               <input
                 id="password"
