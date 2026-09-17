@@ -102,7 +102,7 @@ router.get('/widget.js', async (req, res) => {
   launcher.style.padding = '0';
   launcher.style.overflow = 'hidden';
   launcher.style.background = '#fff';
-  launcher.innerHTML = '<img src="'+API+'/logo.webp" alt="Chat" style="width:100%;height:100%;object-fit:cover"/>';
+  launcher.innerHTML = '<img src="'+API+'/logo.png" alt="Chat" style="width:100%;height:100%;object-fit:cover"/>';
   launcher.onclick = function(){ panel.classList.toggle('open'); };
   document.body.appendChild(launcher);
 

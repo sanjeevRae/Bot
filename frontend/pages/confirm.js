@@ -45,7 +45,7 @@ export default function Confirm() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-5">
       <div className="w-full max-w-md text-center">
         <div className="mx-auto mb-5 h-11 w-11 overflow-hidden rounded-xl bg-white ring-1 ring-gray-200">
-          <img src="/logo.webp" alt="Chitra AI logo" className="h-full w-full object-contain" />
+          <img src="/logo.png" alt="Chitra AI logo" className="h-full w-full object-contain" />
         </div>
         <h1 className="h-display text-2xl">
           {state === 'working' && 'Confirming your email…'}
