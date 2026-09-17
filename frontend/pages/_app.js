@@ -65,7 +65,7 @@ export default function App({ Component, pageProps }) {
     <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5">
         <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink-900">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-600 text-xs font-bold text-white">C</span>
+          <img src="/logo.webp" alt="Chitra AI logo" className="h-7 w-7 rounded-md object-contain" />
           Chitra AI
         </Link>
 
