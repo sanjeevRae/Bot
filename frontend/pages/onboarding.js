@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { api } from '../lib/supabaseClient';
 
@@ -57,11 +57,11 @@ export default function Onboarding() {
 
       {done ? (
         <div className="glass-card p-10 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-2xl text-white shadow-lift">âœ“</div>
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-2xl text-white shadow-lift">✓</div>
           <h2 className="mb-2 text-xl font-semibold tracking-tight text-ink-900">Your bot is learning!</h2>
           <p className="mb-7 text-sm text-ink-500">Knowledge indexed. Try chatting with it from the dashboard.</p>
           <button onClick={() => router.push('/dashboard')} className="btn-primary">
-            Go to dashboard â†’
+            Go to dashboard →
           </button>
         </div>
       ) : step === 1 ? (
@@ -77,7 +77,7 @@ export default function Onboarding() {
                 className="input-min flex-1"
               />
               <button onClick={crawl} disabled={busy || !crawlUrl} className="btn-primary">
-                {busy ? 'Crawlingâ€¦' : 'Add'}
+                {busy ? 'Crawling…' : 'Add'}
               </button>
             </div>
           </div>
@@ -86,20 +86,20 @@ export default function Onboarding() {
         <div className="glass-card space-y-6 p-7">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-ink-900">Paste your business info</label>
-            <p className="mb-4 text-xs leading-relaxed text-ink-400">FAQs, services, prices, opening hours â€” anything customers ask about.</p>
+            <p className="mb-4 text-xs leading-relaxed text-ink-400">FAQs, services, prices, opening hours — anything customers ask about.</p>
             <textarea
               rows={8}
-              placeholder={'Example:\nWe are a family restaurant open 11amâ€“10pm daily.\nTable bookings for up to 12 people.\nSpecialties: butter chicken, dosa, wood-fired pizza.'}
+              placeholder={'Example:\nWe are a family restaurant open 11am–10pm daily.\nTable bookings for up to 12 people.\nSpecialties: butter chicken, dosa, wood-fired pizza.'}
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
               className="input-min resize-none"
             />
             <button onClick={manual} disabled={busy || manualText.trim().length < 20}
               className="btn-primary mt-4">
-              {busy ? 'Indexingâ€¦' : 'Save & train bot'}
+              {busy ? 'Indexing…' : 'Save & train bot'}
             </button>
           </div>
-          <button onClick={() => setStep(1)} className="text-sm font-medium text-brand-600">â† Back to website crawl</button>
+          <button onClick={() => setStep(1)} className="text-sm font-medium text-brand-600">← Back to website crawl</button>
         </div>
       )}
 

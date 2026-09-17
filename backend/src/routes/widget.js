@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const path = require('path');
 const supabaseAdmin = require('../lib/supabase');
 
@@ -6,7 +6,7 @@ const router = express.Router();
 
 /**
  * Resolve an org from a custom domain (Host header).
- * Pro users point chat.theirsite.com CNAME â†’ our backend; when the request
+ * Pro users point chat.theirsite.com CNAME → our backend; when the request
  * arrives with their domain as Host, we serve their widget/bot page.
  */
 async function resolveOrgByDomain(host) {
@@ -112,7 +112,7 @@ router.get('/widget.js', async (req, res) => {
      localStorage.getItem('chitra_session'));
 
   // Scroll isolation: when the cursor is over the chat panel, the wheel
-  // scrolls the conversation â€” never the host website behind it.
+  // scrolls the conversation — never the host website behind it.
   panel.addEventListener('wheel', function(e){
     e.preventDefault();
     e.stopPropagation();
@@ -131,7 +131,7 @@ router.get('/widget.js', async (req, res) => {
     msgs.scrollTop=msgs.scrollHeight;
   }
 
-    /* Markdown renderer v2 â€” headings, bold/italic, inline code, code blocks,
+    /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,
      links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
   function esc(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -204,7 +204,7 @@ router.get('/widget.js', async (req, res) => {
       }
       if(inCode){ codeLines.push(line); continue; }
 
-      // tables â€” a header row only counts if the next line is a separator
+      // tables — a header row only counts if the next line is a separator
       var tr = line.match(/^\\s*\\|(.+)\\|\\s*$/);
       if(tr){
         var cells = tr[1].split('|').map(function(c){ return c.trim(); });
@@ -262,7 +262,7 @@ router.get('/widget.js', async (req, res) => {
     addMsg(text,'user');
     var typing=document.createElement('div');
     typing.className='chitra-msg bot';
-    typing.textContent='â€¦';
+    typing.textContent='…';
     msgs.appendChild(typing);
     msgs.scrollTop=msgs.scrollHeight;
 
@@ -282,7 +282,7 @@ router.get('/widget.js', async (req, res) => {
 });
 
 /**
- * GET /bot/:orgId â€” standalone hosted chat page (for QR codes / direct links).
+ * GET /bot/:orgId — standalone hosted chat page (for QR codes / direct links).
  * Also resolves custom domains: a Pro user's domain root serves their bot page.
  */
 router.get(['/bot/:orgId', '/'], async (req, res) => {
@@ -301,7 +301,7 @@ router.get(['/bot/:orgId', '/'], async (req, res) => {
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   res.type('html').send(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content"/>
-<title>Chat â€” ${org.name}</title>
+<title>Chat — ${org.name}</title>
 <style>
 html,body{height:100%}
 body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;justify-content:center;overflow:hidden}
@@ -316,12 +316,12 @@ input{flex:1;min-width:0;border:none;padding:16px;font-size:16px;outline:none}
 button{border:none;background:#6366f1;color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
 h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bottom:1px solid #eee}
 </style></head><body><div id="chat">
-<h1>ðŸ’¬ ${org.name}</h1><div id="msgs"></div>
+<h1>💬 ${org.name}</h1><div id="msgs"></div>
 <form><input id="in" placeholder="Type a message..." autocomplete="off" enterkeyhint="send"/><button>Send</button></form></div>
 <script>
 var msgs=document.getElementById('msgs'),sid='s_'+Math.random().toString(36).slice(2)+Date.now();
 var BRAND = '#6366f1';
-  /* Markdown renderer v2 â€” headings, bold/italic, inline code, code blocks,
+  /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,
      links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
   function esc(s){
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -394,7 +394,7 @@ var BRAND = '#6366f1';
       }
       if(inCode){ codeLines.push(line); continue; }
 
-      // tables â€” a header row only counts if the next line is a separator
+      // tables — a header row only counts if the next line is a separator
       var tr = line.match(/^\\s*\\|(.+)\\|\\s*$/);
       if(tr){
         var cells = tr[1].split('|').map(function(c){ return c.trim(); });

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/supabaseClient';
 
 const PLANS = [
@@ -64,18 +64,18 @@ export default function Billing() {
         <p className="mt-1 text-sm text-ink-500">
           Current plan:{' '}
           <span className="font-semibold capitalize text-brand-600">{currentPlan}</span>
-          {expires && currentPlan !== 'free' && <> Â· renews {expires}</>}
+          {expires && currentPlan !== 'free' && <> · renews {expires}</>}
         </p>
       </div>
 
       {status === 'success' && (
         <div className="mb-6 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          ðŸŽ‰ Payment successful! Your plan is now active.
+          🎉 Payment successful! Your plan is now active.
         </div>
       )}
       {status === 'failed' && (
         <div className="mb-6 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-          Payment failed or was cancelled. No charge was made â€” please try again.
+          Payment failed or was cancelled. No charge was made — please try again.
         </div>
       )}
       {error && (
@@ -142,7 +142,7 @@ export default function Billing() {
                 disabled={isCurrent || busy === p.id}
                 className={`mt-6 w-full ${isCurrent ? 'btn-secondary cursor-default' : 'btn-primary'}`}
               >
-                {isCurrent ? 'Current plan' : busy === p.id ? 'Redirectingâ€¦' : `Upgrade to ${p.name}`}
+                {isCurrent ? 'Current plan' : busy === p.id ? 'Redirecting…' : `Upgrade to ${p.name}`}
               </button>
             </div>
           );
@@ -157,7 +157,7 @@ export default function Billing() {
       </form>
 
       <p className="mt-8 text-center text-xs leading-relaxed text-ink-400">
-        * Multi-client management coming soon Â· Payments processed securely by eSewa / Khalti Â·
+        * Multi-client management coming soon · Payments processed securely by eSewa / Khalti ·
         Subscriptions last 30 days per payment
       </p>
     </main>
