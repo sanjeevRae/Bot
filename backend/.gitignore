@@ -1,2 +1,5 @@
 node_modules/
 .env
+
+# Throwaway local scripts (never commit these)
+tmp-*.js
