@@ -235,7 +235,7 @@ async function inviteClientUser(email, clientOrg) {
   const sent = await emailSvc.sendEmail(
     email,
     `Sign in to ${clientOrg.name} — Chitra AI`,
-    emailSvc.notifyTemplate(
+    emailSvc.brandedEmail(
       'Your AI assistant workspace is ready',
       `<p>You have been invited to manage <strong>${clientOrg.name}</strong>'s AI assistant.</p>
        <p style="margin:20px 0">

@@ -62,6 +62,11 @@ const config = {
     publicUrl: process.env.PUBLIC_BACKEND_URL || '',
   },
 
+  // Plan upgrade requests submitted from the billing page.
+  billing: {
+    adminEmail: process.env.BILLING_ADMIN_EMAIL || 'info@chitratech.com.np',
+  },
+
   // Cloudflare Turnstile (bot protection — free, unlimited)
   turnstile: {
     secretKey: process.env.TURNSTILE_SECRET_KEY || '',
