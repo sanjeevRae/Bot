@@ -2,7 +2,7 @@ const express = require('express');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { sendEmail } = require('../services/email');
-const { computeTotals, nextInvoiceNo, renderInvoiceHtml, amountInWords } = require('../services/invoice');
+const { computeTotals, nextInvoiceNo, renderInvoiceHtml, amountInWords, buildInvoicePdf, renderInvoiceCoverLetter } = require('../services/invoice');
 
 const router = express.Router();
 
@@ -637,7 +637,10 @@ router.post('/invoices/:id/send', async (req, res) => {
   const to = String((req.body && req.body.to) || inv.customer.email || '').trim();
   if (!to) return res.status(400).json({ error: 'This invoice has no customer email. Add one, or pass a specific address.' });
   const subject = 'Invoice ' + inv.invoiceNo + (company.name ? ' from ' + company.name : '');
-  const sent = await sendEmail(to, subject, renderInvoiceHtml(inv));
+  const pdf = await buildInvoicePdf(inv);
+  if (!pdf) return res.status(500).json({ error: 'Could not generate the invoice PDF.' });
+  const attachments = [{ filename: inv.invoiceNo + '.pdf', content: pdf.toString('base64') }];
+  const sent = await sendEmail(to, subject, renderInvoiceCoverLetter(inv, company), attachments);
   if (!sent) return res.status(502).json({ error: 'Could not send the email. Check the email provider settings (BREVO_API_KEY, EMAIL_FROM).' });
   const { data } = await supabaseAdmin.from('invoices')
     .update({ status: row.status === 'draft' ? 'sent' : row.status, sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })

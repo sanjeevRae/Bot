@@ -1,4 +1,12 @@
 const supabaseAdmin = require('../lib/supabase');
+// Loaded lazily so HTML rendering keeps working even if pdfkit is missing.
+let PDFDocument = null;
+function pdfLib() {
+  if (PDFDocument === null) {
+    try { PDFDocument = require('pdfkit'); } catch { PDFDocument = false; }
+  }
+  return PDFDocument || null;
+}
 
 /**
  * Invoice helpers: totals, amount in words, invoice numbering and the printable
@@ -296,4 +304,298 @@ function renderInvoiceHtml(inv) {
     + renderFooter(invoice, company)
     + '</div></body></html>';
 }
-module.exports = { amountInWords, computeTotals, normalizeItems, nextInvoiceNo, money, round2, renderInvoiceHtml };
+/**
+ * Real A4 PDF of the same invoice, so the customer receives a proper
+ * attachment instead of only a web page in the email body.
+ * Returns a Buffer, or null when pdfkit is not installed.
+ */
+function buildInvoicePdf(inv) {
+  const Lib = pdfLib();
+  if (!Lib) return null;
+  const doc = new Lib({ size: 'A4', margin: 36, bufferPages: true });
+  const chunks = [];
+  doc.on('data', (c) => chunks.push(c));
+  const done = new Promise((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
+
+  const company = inv.company || {};
+  const customer = inv.customer || {};
+  const items = normalizeItems(inv.items);
+  const totals = computeTotals(items, inv.discount, inv.serviceCharge);
+  const words = has(inv.totalInWords) ? inv.totalInWords : amountInWords(totals.total);
+  const ink = '#111827';
+  const muted = '#6b7280';
+  const hair = '#e5e7eb';
+  const pageW = doc.page.width;
+  const L = doc.page.margins.left;
+  const R = pageW - doc.page.margins.right;
+  const W = R - L;
+  const bottom = doc.page.height - 50;
+
+  const need = (h) => { if (doc.y + h > bottom) doc.addPage(); };
+  const label = (str, x, y, w, align) => {
+    doc.fillColor(muted).font('Helvetica').fontSize(8.5).text(str, x, y, { width: w, align: align || 'left' });
+  };
+  const strong = (str, x, y, w, align, size) => {
+    doc.fillColor(ink).font('Helvetica-Bold').fontSize(size || 9).text(str, x, y, { width: w, align: align || 'left' });
+  };
+  const para = (str, x, y, w, opts) => {
+    doc.fillColor(ink).font('Helvetica').fontSize(opts && opts.size ? opts.size : 9).text(String(str), x, y, { width: w, lineGap: 1.5 });
+    return doc.y;
+  };
+
+  // ---------- header ----------
+  const top = 40;
+  const logoIsUrl = typeof company.logoUrl === 'string' && /^https?:\/\//.test(company.logoUrl);
+  let drewLogo = false;
+  if (logoIsUrl) {
+    try { doc.image(company.logoUrl, L, top, { fit: [52, 52] }); drewLogo = true; } catch { drewLogo = false; }
+  }
+  if (!drewLogo) {
+    doc.roundedRect(L, top, 52, 52, 8).fill('#059669');
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(24).text('C', L, top + 13, { width: 52, align: 'center' });
+  }
+  const cx = L + 66;
+  doc.fillColor(ink).font('Helvetica-Bold').fontSize(15).text(company.name || 'Company', cx, top);
+  let cy = top + 19;
+  doc.font('Helvetica').fontSize(8);
+  [company.address,
+    [company.phone, company.email].filter(has).join('  |  '),
+    company.website,
+    [company.regNo ? 'Reg. No.: ' + company.regNo : '', company.tpin ? 'TPIN: ' + company.tpin : ''].filter(has).join('  |  '),
+  ].filter(has).forEach((line) => {
+    doc.fillColor(muted).text(line, cx, cy, { width: 300 });
+    cy += 11;
+  });
+  const meta = [
+    ['Invoice No.', inv.invoiceNo],
+    ['Transaction Date', inv.transactionDate],
+    ['Reprint Date', inv.reprintDate],
+    ['Copy', inv.copyStatus],
+  ].filter((p) => has(p[1]));
+  let my = top + 2;
+  meta.forEach((p) => {
+    label(p[0] + ': ', R - 150, my, 150, 'left');
+    doc.fillColor(ink).font('Helvetica-Bold').fontSize(8.5).text(String(p[1]), R - 60, my, { width: 60, align: 'right' });
+    doc.font('Helvetica');
+    my += 13;
+  });
+  const ruleY = Math.max(cy, my) + 6;
+  doc.moveTo(L, ruleY).lineTo(R, ruleY).lineWidth(1.3).strokeColor(ink).stroke();
+  doc.y = ruleY + 12;
+
+  // ---------- INVOICE title ----------
+  doc.fillColor(ink).font('Helvetica-Bold').fontSize(14).text('INVOICE', L, doc.y, { width: W, align: 'center', characterSpacing: 5 });
+  doc.moveTo(L, doc.y + 3).lineTo(R, doc.y + 3).lineWidth(0.6).strokeColor('#9ca3af').stroke();
+  doc.y += 14;
+
+  // ---------- customer ----------
+  const custLines = [
+    [customer.name, true],
+    [customer.customerId ? 'Customer ID / Username: ' + customer.customerId : '', false],
+    [customer.address, false],
+    [customer.phone ? 'Phone: ' + customer.phone : '', false],
+    [customer.tpin ? 'Customer TPIN: ' + customer.tpin : '', false],
+    [customer.panNo ? 'Customer PAN: ' + customer.panNo : '', false],
+    [customer.email, false],
+  ].filter((p) => has(p[0]));
+  const custH = 26 + custLines.reduce((h, p) => h + (p[1] ? 13 : 11), 0);
+  need(custH);
+  const cY = doc.y;
+  doc.roundedRect(L, cY, W, custH, 6).fill('#f9fafb');
+  doc.roundedRect(L, cY, W, custH, 6).lineWidth(0.8).strokeColor(hair).stroke();
+  let ty = cY + 9;
+  label('BILL TO', L + 12, ty); ty += 13;
+  custLines.forEach((p) => {
+    if (p[1]) strong(p[0], L + 12, ty, W - 24, 'left', 10);
+    else label(p[0], L + 12, ty, W - 24);
+    ty += p[1] ? 13 : 11;
+  });
+  doc.y = cY + custH + 12;
+
+  // ---------- items table ----------
+  const cols = [
+    { key: 'sn', title: 'S.N.', w: 26, align: 'center' },
+    { key: 'panNo', title: 'PAN No', w: 62, align: 'center' },
+    { key: 'particulars', title: 'Particulars', w: 168, align: 'left' },
+    { key: 'description', title: 'Description', w: 116, align: 'left' },
+    { key: 'qty', title: 'Qty', w: 30, align: 'center' },
+    { key: 'rate', title: 'Rate', w: 56, align: 'right' },
+    { key: 'amount', title: 'Amount', w: 65, align: 'right' },
+  ];
+  const totalW = cols.reduce((s, c) => s + c.w, 0);
+  const scale = W / totalW;
+  cols.forEach((c) => { c.w = Math.floor(c.w * scale); c.x = 0; });
+  let ax = L;
+  cols.forEach((c) => { c.x = ax; ax += c.w; });
+
+  const rowHeight = (row) => {
+    const sub = [
+      row.packageName ? 'Package: ' + row.packageName : '',
+      row.plan ? 'Plan: ' + row.plan : '',
+      row.billingPeriod ? 'Billing period: ' + row.billingPeriod : '',
+      row.effectiveDate ? 'Effective from: ' + row.effectiveDate : '',
+    ].filter(has).join('\n');
+    const left1 = doc.heightOfString(String(row.particulars || '') + (sub ? '\n' + sub : ''), { width: cols[2].w - 10, fontSize: 8 });
+    const left2 = doc.heightOfString(String(row.description || ''), { width: cols[3].w - 10, fontSize: 8 });
+    return Math.max(20, Math.max(left1, left2) + 10);
+  };
+
+  const drawHead = () => {
+    const h = 22;
+    doc.rect(L, doc.y, W, h).fill('#f3f4f6');
+    let x = L;
+    cols.forEach((c) => {
+      doc.fillColor('#374151').font('Helvetica-Bold').fontSize(7.5).text(c.title.toUpperCase(), c.x, doc.y + 7, { width: c.w, align: c.align === 'center' ? 'center' : c.align === 'right' ? 'right' : 'left' });
+      doc.moveTo(x, doc.y).lineTo(x, doc.y + h).lineWidth(0.6).strokeColor(hair).stroke();
+      x += c.w;
+    });
+    doc.moveTo(R, doc.y).lineTo(R, doc.y + h).lineWidth(0.6).strokeColor(hair).stroke();
+    doc.moveTo(L, doc.y + h).lineTo(R, doc.y + h).lineWidth(0.6).strokeColor(hair).stroke();
+    doc.y += h;
+  };
+
+  need(60);
+  drawHead();
+  items.forEach((row) => {
+    const h = rowHeight(row);
+    if (doc.y + h > bottom) { doc.addPage(); drawHead(); }
+    const y0 = doc.y;
+    doc.rect(L, y0, W, h).fill('#ffffff');
+    const sub = [
+      row.packageName ? 'Package: ' + row.packageName : '',
+      row.plan ? 'Plan: ' + row.plan : '',
+      row.billingPeriod ? 'Billing period: ' + row.billingPeriod : '',
+      row.effectiveDate ? 'Effective from: ' + row.effectiveDate : '',
+    ].filter(has).join('\n');
+    const put = (str, col, opts) => {
+      doc.fillColor(ink).font('Helvetica').fontSize(8).text(String(str), col.x + 5, y0 + 6, { width: col.w - 10, align: col.align, ...opts });
+    };
+    put(String(row.sn), cols[0]);
+    put(has(row.panNo) ? row.panNo : '-', cols[1]);
+    doc.fillColor(ink).font('Helvetica-Bold').fontSize(8).text(String(row.particulars || ''), cols[2].x + 5, y0 + 6, { width: cols[2].w - 10 });
+    if (sub) doc.fillColor(muted).font('Helvetica').fontSize(7).text(sub, cols[2].x + 5, doc.y, { width: cols[2].w - 10 });
+    doc.font('Helvetica').fontSize(8);
+    put(has(row.description) ? row.description : '', cols[3]);
+    put(String(row.qty), cols[4]);
+    put(money(row.rate), cols[5]);
+    doc.fillColor(ink).font('Helvetica-Bold').fontSize(8).text(money(row.amount), cols[6].x + 5, y0 + 6, { width: cols[6].w - 10, align: 'right' });
+    let x = L;
+    cols.forEach((c) => { doc.moveTo(x, y0).lineTo(x, y0 + h).lineWidth(0.6).strokeColor(hair).stroke(); x += c.w; });
+    doc.moveTo(R, y0).lineTo(R, y0 + h).lineWidth(0.6).strokeColor(hair).stroke();
+    doc.moveTo(L, y0 + h).lineTo(R, y0 + h).lineWidth(0.6).strokeColor(hair).stroke();
+    doc.y = y0 + h;
+  });
+
+  // ---------- summary ----------
+  const discount = Number(inv.discount) || 0;
+  const service = Number(inv.serviceCharge) || 0;
+  const sumRows = [];
+  sumRows.push(['Subtotal', money(totals.subtotal), false]);
+  if (discount) sumRows.push(['Discount', '- ' + money(discount), false]);
+  if (service) sumRows.push(['Service charge', money(service), false]);
+  sumRows.push(['Total Amount', 'Rs. ' + money(totals.total), true]);
+  const sumH = 12 + sumRows.length * 16 + 8;
+  need(sumH + 60);
+  const sY = doc.y;
+  const sumW = 220;
+  const sumX = R - sumW;
+  let ry = sY;
+  sumRows.forEach((p) => {
+    if (p[2]) { doc.moveTo(sumX, ry).lineTo(R, ry).lineWidth(0.8).strokeColor('#9ca3af').stroke(); ry += 5; }
+    label(p[0], sumX, ry + 2, sumW - 80, 'right');
+    strong(p[1], R - 76, ry, 76, 'right', p[2] ? 10.5 : 8.5);
+    ry += p[2] ? 18 : 16;
+  });
+  doc.y = ry + 6;
+
+  // ---------- words + payment ----------
+  const payLines = [
+    has(words) ? 'Amount in words: ' + words : '',
+    inv.paymentMode ? 'Payment mode: ' + inv.paymentMode : '',
+    inv.paymentRef ? 'Payment reference: ' + inv.paymentRef : '',
+    inv.dueDate ? 'Due date: ' + inv.dueDate : '',
+    company.bankDetails ? 'Bank: ' + company.bankDetails : '',
+    company.paymentInstructions || '',
+  ].filter(has);
+  const qrIsUrl = typeof (inv.paymentQrUrl || company.paymentQrUrl) === 'string' && /^https?:\/\//.test(inv.paymentQrUrl || company.paymentQrUrl || '');
+  const payH = 22 + payLines.reduce((h, t) => h + doc.heightOfString(t, { width: qrIsUrl ? W - 150 : W - 24, fontSize: 8 }) + 3, 0);
+  if (payLines.length || qrIsUrl) {
+    need(payH + 8);
+    const pY = doc.y;
+    doc.roundedRect(L, pY, W, payH, 6).fill('#f9fafb');
+    doc.roundedRect(L, pY, W, payH, 6).lineWidth(0.8).strokeColor(hair).stroke();
+    label('PAYMENT DETAILS', L + 12, pY + 8);
+    let py = pY + 22;
+    payLines.forEach((t) => { py = para(t, L + 12, py, qrIsUrl ? W - 150 : W - 24, { size: 8 }) + 3; });
+    if (qrIsUrl) {
+      try { doc.image(inv.paymentQrUrl || company.paymentQrUrl, R - 116, pY + 12, { fit: [104, 104] }); } catch { /* skip */ }
+    }
+    doc.y = pY + payH + 12;
+  }
+
+  // ---------- notes + terms ----------
+  const ntBlocks = [];
+  if (has(inv.notes)) ntBlocks.push(['NOTES', inv.notes]);
+  if (has(inv.terms)) ntBlocks.push(['TERMS', inv.terms]);
+  if (ntBlocks.length) {
+    need(40);
+    doc.moveTo(L, doc.y).lineTo(R, doc.y).lineWidth(0.6).strokeColor(hair).stroke();
+    doc.y += 8;
+    ntBlocks.forEach((b) => {
+      label(b[0], L, doc.y);
+      doc.y += 11;
+      doc.y = para(b[1], L, doc.y, W, { size: 8 }) + 6;
+    });
+  }
+
+  // ---------- signature + stamp ----------
+  need(90);
+  const sigY = Math.max(doc.y + 14, bottom - 74);
+  const sig = has(company.signatureUrl);
+  if (sig) { try { doc.image(company.signatureUrl, L, sigY - 42, { fit: [120, 40] }); } catch { /* skip */ } }
+  doc.moveTo(L, sigY).lineTo(L + 180, sigY).lineWidth(0.8).strokeColor('#9ca3af').stroke();
+  label('Authorised Signature', L, sigY + 4);
+  strong(company.name || '', L, sigY + 15, 220);
+  if (has(company.stampUrl)) {
+    try { doc.image(company.stampUrl, R - 92, sigY - 58, { fit: [90, 90] }); } catch { /* skip */ }
+  }
+  label('Company Stamp', R - 92, sigY + 18, 92, 'center');
+
+  // ---------- page footers ----------
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    doc.fillColor(muted).font('Helvetica').fontSize(7)
+      .text(company.footerNote || 'This is a computer-generated invoice.', L, doc.page.height - 34, { width: W, align: 'center', lineBreak: false });
+    if (has(company.thankYou)) {
+      doc.fillColor(ink).font('Helvetica-Bold').fontSize(7.5)
+        .text(company.thankYou, L, doc.page.height - 23, { width: W, align: 'center', lineBreak: false });
+    }
+  }
+
+  doc.end();
+  return done;
+}
+/**
+ * Short cover letter that introduces the attached PDF invoice, in the style
+ * customers expect from a Nepali service provider.
+ */
+function renderInvoiceCoverLetter(inv, company) {
+  const c = inv.customer || {};
+  const name = has(c.name) ? c.name : 'Valued Customer';
+  const brand = company.name || 'Chitra Tech';
+  const logo = has(company.logoUrl)
+    ? '<img src="' + esc(company.logoUrl) + '" alt="" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />'
+    : '<span style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>';
+  return '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">'
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' + logo + '<strong style="font-size:15px;color:#111827">' + esc(brand) + '</strong></div>'
+    + '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151">Dear ' + esc(name) + ',</p>'
+    + '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151">Greetings from ' + esc(brand) + '!</p>'
+    + '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151">Please find attached the electronic invoice <strong>' + esc(inv.invoiceNo) + '</strong> against your payment for ' + esc(brand) + '. If you have any query, please contact our Accounts Section or write to us at ' + esc(company.email || '') + '.</p>'
+    + '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151">Thank you for your business.</p>'
+    + '<p style="margin:0 0 2px;font-size:14px;line-height:1.6;color:#374151">Best regards,</p>'
+    + '<p style="margin:0;font-size:14px;line-height:1.6;color:#374151">Customer Accounts Department,<br/>' + esc(brand) + '</p>'
+    + '<p style="margin:14px 0 0;font-size:12px;color:#6b7280">Invoice ' + esc(inv.invoiceNo) + ' for Rs. ' + money(inv.total) + ' is attached as a PDF.</p>'
+    + '</div>';
+}
+module.exports = { amountInWords, computeTotals, normalizeItems, nextInvoiceNo, money, round2, renderInvoiceHtml, buildInvoicePdf, renderInvoiceCoverLetter };
