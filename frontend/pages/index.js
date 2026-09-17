@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import DemoWidget from '../components/DemoWidget';
 
 /* Inline SVG icon set (Lucide-style strokes) */
@@ -85,14 +85,14 @@ export default function Home() {
     <main>
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-4 pb-10 pt-12 text-center sm:px-6 sm:pb-10 sm:pt-12">
-        <span className="chip mb-6">Free trial · No credit card required</span>
+        <span className="chip mb-6">Free trial Â· No credit card required</span>
         <h1 className="h-display mx-auto mb-5 max-w-3xl text-4xl leading-[1.1] sm:text-5xl md:text-[56px]">
           AI Assistant That Sells,
           <br />
           Books &amp; Never Sleeps
         </h1>
         <p className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-ink-500 sm:text-lg">
-          From first question to confirmed booking — let AI handle your customers
+          From first question to confirmed booking â€” let AI handle your customers
           around the clock, seamlessly.
         </p>
         <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -125,8 +125,8 @@ export default function Home() {
             { icon: Icons.calendar, title: 'Books appointments', text: 'Customers book right in the chat. You get notified instantly.' },
             { icon: Icons.target, title: 'Captures leads', text: 'Every interested visitor becomes a lead in your dashboard.' },
             { icon: Icons.puzzle, title: 'Installs anywhere', text: 'One script tag for any website, WordPress plugin, or QR code link.' },
-            { icon: Icons.shield, title: 'Private by design', text: 'Row-level security keeps every business’s data fully isolated.' },
-            { icon: Icons.zap, title: 'Fast & free', text: 'Powered by Groq’s lightning inference. Generous free tier, upgrade only when you grow.' },
+            { icon: Icons.shield, title: 'Private by design', text: 'Row-level security keeps every businessâ€™s data fully isolated.' },
+            { icon: Icons.zap, title: 'Fast & free', text: 'Powered by Groqâ€™s lightning inference. Generous free tier, upgrade only when you grow.' },
           ].map((f) => (
             <div key={f.title} className="card p-6 transition-colors duration-150 hover:border-gray-300">
               <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-brand-100 bg-brand-50">
@@ -149,7 +149,7 @@ export default function Home() {
           />
           <div className="grid gap-4 md:grid-cols-3 md:gap-6">
             {[
-              ['1', 'Sign up & describe your business', 'Create a free account and tell us your industry — restaurant, salon, clinic or anything else.'],
+              ['1', 'Sign up & describe your business', 'Create a free account and tell us your industry â€” restaurant, salon, clinic or anything else.'],
               ['2', 'Teach it your business', 'Crawl your website, upload a PDF menu, or paste FAQs. Chitra builds its own knowledge base in seconds.'],
               ['3', 'Copy one line to your website', 'Paste a single script tag or share your QR link. Your assistant starts working immediately.'],
             ].map(([n, title, text]) => (
@@ -164,7 +164,7 @@ export default function Home() {
           </div>
           <div className="mt-10 text-center">
             <Link href="/signup" className="btn-primary px-7 py-3">
-              Start now — it&apos;s free
+              Start now â€” it&apos;s free
             </Link>
           </div>
         </div>
@@ -175,10 +175,10 @@ export default function Home() {
         <SectionHeader
           eyebrow="Features"
           title="Your business, on autopilot"
-          text="Chitra learns your business once and works 24/7 — answering questions, capturing leads, booking appointments."
+          text="Chitra learns your business once and works 24/7 â€” answering questions, capturing leads, booking appointments."
         />
 
-        {/* Panel 1 — chat mock */}
+        {/* Panel 1 â€” chat mock */}
         <div className="card mb-6 grid overflow-hidden md:grid-cols-2">
           <div className="flex flex-col justify-center p-7 sm:p-10">
             <h3 className="h-display mb-3 text-2xl sm:text-3xl">
@@ -186,7 +186,7 @@ export default function Home() {
             </h3>
             <p className="mb-8 text-[15px] leading-relaxed text-ink-500">
               Feed it your website, menu or price list once. Chitra answers customer
-              questions instantly and accurately — 24/7, in any language your
+              questions instantly and accurately â€” 24/7, in any language your
               customers speak.
             </p>
             <Link href="/signup" className="btn-primary w-fit px-5 py-2.5">
@@ -199,7 +199,7 @@ export default function Home() {
               <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                 <span className="text-sm font-medium text-ink-900">Chitra Assistant</span>
                 <span className="chip-success">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Online
+                  <span className="h-1.5 w-1.5 rounded-full bg-ink-900"></span> Online
                 </span>
               </div>
               <div className="space-y-2.5 p-4">
@@ -207,7 +207,7 @@ export default function Home() {
                   Hi! Is the salon open this Sunday?
                 </div>
                 <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-brand-600 px-3.5 py-2.5 text-[13px] text-white">
-                  Yes! We&apos;re open 10am–6pm this Sunday. Would you like me to book you a slot?
+                  Yes! We&apos;re open 10amâ€“6pm this Sunday. Would you like me to book you a slot?
                 </div>
                 <div className="max-w-[85%] rounded-lg rounded-bl-sm bg-gray-100 px-3.5 py-2.5 text-[13px] text-ink-700">
                   Yes, 2pm for a haircut please
@@ -239,9 +239,9 @@ export default function Home() {
                 </div>
                 <div className="divide-y divide-gray-100">
                   {[
-                    ['Maya Sharma', 'Haircut · 2:00 PM', true],
-                    ['Rohan Patel', 'Table for 4 · 7:30 PM', true],
-                    ['Aisha K.', 'Consultation · 4:15 PM', false],
+                    ['Maya Sharma', 'Haircut Â· 2:00 PM', true],
+                    ['Rohan Patel', 'Table for 4 Â· 7:30 PM', true],
+                    ['Aisha K.', 'Consultation Â· 4:15 PM', false],
                   ].map(([name, detail, confirmed]) => (
                     <div key={name} className="flex items-center gap-3 px-4 py-3">
                       <img
@@ -269,7 +269,7 @@ export default function Home() {
               <h3 className="h-display mb-2 text-xl sm:text-2xl">Never lose a lead</h3>
               <p className="text-sm leading-relaxed text-ink-500">
                 Every visitor who shares their contact info is saved
-                automatically — ready for you to follow up.
+                automatically â€” ready for you to follow up.
               </p>
             </div>
             <div className="border-t border-gray-200 bg-gray-50 p-5 sm:p-6">
@@ -307,7 +307,7 @@ export default function Home() {
             dark
             eyebrow="Integrations"
             title="Don't replace. Integrate."
-            text="Chitra fits into the tools you already use — no migration, no learning curve. Connect in one click."
+            text="Chitra fits into the tools you already use â€” no migration, no learning curve. Connect in one click."
           />
           <div className="space-y-3 sm:space-y-4">
             {[
@@ -334,7 +334,7 @@ export default function Home() {
           </div>
           <div className="mt-10 text-center">
             <Link href="/signup" className="btn-link !text-brand-300 hover:!text-white">
-              All integrations <span aria-hidden>→</span>
+              All integrations <span aria-hidden>â†’</span>
             </Link>
           </div>
         </div>
@@ -344,7 +344,7 @@ export default function Home() {
       <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-6 sm:py-24">
         <blockquote className="h-display mx-auto mb-8 max-w-2xl text-2xl leading-snug sm:text-3xl">
           Chitra answers our customers while we sleep. It booked 40+ appointments
-          in the first month alone — and we didn&apos;t hire anyone.
+          in the first month alone â€” and we didn&apos;t hire anyone.
         </blockquote>
         <img
           src="https://i.pravatar.cc/96?img=32"
@@ -380,7 +380,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white px-5 pb-8 pt-14 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          {/* Brand — full width above the link row */}
+          {/* Brand â€” full width above the link row */}
           <div className="mb-10">
             <div className="mb-4 flex items-center gap-2.5">
               <img src="/logo.webp" alt="Chitra AI logo" className="h-8 w-8 rounded-lg object-contain" />
@@ -397,7 +397,7 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Link columns — side by side on all screens */}
+          {/* Link columns â€” side by side on all screens */}
           <div className="grid grid-cols-3 gap-4 sm:gap-8">
             {[
               ['Product', [
@@ -435,7 +435,7 @@ export default function Home() {
           </div>
 
           <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-gray-200 pt-6 sm:flex-row">
-            <p className="text-xs text-ink-400">© Copyright 2026 Chitra AI. All rights reserved.</p>
+            <p className="text-xs text-ink-400">Â© Copyright 2026 Chitra AI. All rights reserved.</p>
             <div className="flex gap-4">
               {[
                 ['Facebook', 'https://www.facebook.com/people/Chitra-Tech/61589090079956/', 'https://s.magecdn.com/social/tc-facebook.svg'],

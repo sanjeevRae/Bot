@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { api, fetchApi, getManagingOrg, setManagingOrg } from '../lib/supabaseClient';
 
 /**
- * Minimal markdown → JSX renderer for bot replies.
+ * Minimal markdown â†’ JSX renderer for bot replies.
  * Supports: **bold**, *italic*, `code`, - bullets, 1. numbered lists,
  * ### headings, tables (| a | b |), and [links](url).
  */
@@ -88,7 +88,7 @@ function renderMarkdown(text) {
     // Table handling
     if (isTableRow(line)) {
       const cells = parseRow(line);
-      // separator row like |---|---| → skip
+      // separator row like |---|---| â†’ skip
       if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;
       if (!table) table = { header: cells, rows: [] };
       else table.rows.push(cells);
@@ -96,7 +96,7 @@ function renderMarkdown(text) {
     }
     flushTable();
 
-    const bullet = line.match(/^\s*[-•*]\s+(.*)/);
+    const bullet = line.match(/^\s*[-â€¢*]\s+(.*)/);
     const numbered = line.match(/^\s*\d+[.)]\s+(.*)/);
     const heading = line.match(/^(#{1,6})\s+(.*)/);
 
@@ -145,7 +145,7 @@ export default function Dashboard() {
   }, [router.isReady, router.query.org]);
 
   if (error) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-red-500">{error}</main>;
-  if (!data) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-ink-400">Loading dashboard…</main>;
+  if (!data) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-ink-400">Loading dashboardâ€¦</main>;
 
   const { org, usage } = data;
 
@@ -158,7 +158,7 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
-      <p className="eyebrow mb-1">{org.industry || 'Business'} · Free plan</p>
+      <p className="eyebrow mb-1">{org.industry || 'Business'} Â· Free plan</p>
       <h1 className="mb-10 text-3xl font-semibold tracking-tight text-ink-900">{org.name}</h1>
 
       {/* Stats */}
@@ -212,8 +212,8 @@ function TestChat({ orgId }) {
       <div className="flex items-center gap-2.5 border-b border-white/70 px-5 py-3.5">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[11px] font-semibold text-white">C</div>
         <span className="text-sm font-medium text-ink-900">Test your bot</span>
-        <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live
+        <span className="ml-auto flex items-center gap-1 text-[11px] text-ink-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-ink-900"></span> Live
         </span>
       </div>
       <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
@@ -236,7 +236,7 @@ function TestChat({ orgId }) {
       </div>
       <form onSubmit={send} className="flex border-t border-white/70 bg-white/50">
         <input value={input} onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question…" className="flex-1 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-ink-400" />
+          placeholder="Ask a questionâ€¦" className="flex-1 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-ink-400" />
         <button className="px-5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-800">Send</button>
       </form>
     </div>
@@ -261,9 +261,9 @@ function InstallSection({ orgId }) {
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-xs text-ink-500">1 · Embed widget (any website)</span>
+          <span className="text-xs text-ink-500">1 Â· Embed widget (any website)</span>
           <button onClick={() => copy(snippet, 'snippet')} className="text-xs font-medium text-brand-600 hover:text-brand-800">
-            {copied === 'snippet' ? '✓ Copied' : 'Copy'}
+            {copied === 'snippet' ? 'âœ“ Copied' : 'Copy'}
           </button>
         </div>
         <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-white/60 bg-gray-900/[0.05] p-3 text-xs leading-relaxed text-ink-700">{snippet}</pre>
@@ -271,9 +271,9 @@ function InstallSection({ orgId }) {
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-xs text-ink-500">2 · Direct chat link (QR codes, bio)</span>
+          <span className="text-xs text-ink-500">2 Â· Direct chat link (QR codes, bio)</span>
           <button onClick={() => copy(botLink, 'link')} className="text-xs font-medium text-brand-600 hover:text-brand-800">
-            {copied === 'link' ? '✓ Copied' : 'Copy'}
+            {copied === 'link' ? 'âœ“ Copied' : 'Copy'}
           </button>
         </div>
         <pre className="overflow-x-auto break-all rounded-xl border border-white/60 bg-gray-900/[0.05] p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>

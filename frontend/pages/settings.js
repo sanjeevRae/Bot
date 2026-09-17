@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { api } from '../lib/supabaseClient';
 
@@ -33,7 +33,7 @@ export default function Settings() {
     } catch (e) { setError(e.message); }
   }
 
-  if (!settings) return <main className="mx-auto max-w-2xl px-6 py-16 text-sm text-ink-400">{error || 'Loading…'}</main>;
+  if (!settings) return <main className="mx-auto max-w-2xl px-6 py-16 text-sm text-ink-400">{error || 'Loadingâ€¦'}</main>;
 
   const inputCls = 'input-base';
 
@@ -76,10 +76,10 @@ export default function Settings() {
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Brand color</label>
               <div className="flex items-center gap-3">
-                <input type="color" value={settings.brand_color || '#059669'}
+                <input type="color" value={settings.brand_color || '#18181b'}
                   onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
                   className="h-9 w-14 cursor-pointer rounded-lg border border-gray-300 bg-white p-1" />
-                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#059669'}</span>
+                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#18181b'}</span>
               </div>
             </div>
           </div>
@@ -108,7 +108,7 @@ export default function Settings() {
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-900">White-label &amp; custom domain</h2>
-            {!isPro && <Link href="/billing" className="btn-link !text-xs">Upgrade →</Link>}
+            {!isPro && <Link href="/billing" className="btn-link !text-xs">Upgrade â†’</Link>}
           </div>
           <p className="mb-4 text-xs text-ink-400">
             {isPro
@@ -123,7 +123,7 @@ export default function Settings() {
                 onChange={(e) => setSettings({ ...settings, white_label: e.target.checked })}
                 className="h-4 w-4 rounded border-gray-300 accent-brand-600"
               />
-              <span className="text-[13px] text-ink-700">Hide “Powered by Chitra AI” in the widget</span>
+              <span className="text-[13px] text-ink-700">Hide â€œPowered by Chitra AIâ€ in the widget</span>
             </label>
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Custom chat domain</label>
@@ -135,7 +135,7 @@ export default function Settings() {
               />
               <p className="mt-1.5 text-xs leading-relaxed text-ink-400">
                 After saving, add a CNAME record in your DNS:{' '}
-                <code className="rounded bg-gray-100 px-1 font-mono">{settings.custom_domain || 'chat.yourbusiness.com'} → CNAME → your-api.onrender.com</code>
+                <code className="rounded bg-gray-100 px-1 font-mono">{settings.custom_domain || 'chat.yourbusiness.com'} â†’ CNAME â†’ your-api.onrender.com</code>
               </p>
             </div>
           </div>
@@ -143,7 +143,7 @@ export default function Settings() {
 
         <section className="card p-6">
           <h2 className="mb-1 text-sm font-semibold text-ink-900">API key</h2>
-          <p className="mb-4 text-xs text-ink-400">For advanced integrations. Shown once — store it safely.</p>
+          <p className="mb-4 text-xs text-ink-400">For advanced integrations. Shown once â€” store it safely.</p>
           {apiKey && (
             <pre className="mb-4 break-all rounded-lg border border-gray-200 bg-gray-50 p-3.5 font-mono text-xs leading-relaxed text-ink-700">{apiKey}</pre>
           )}
@@ -155,7 +155,7 @@ export default function Settings() {
       <div className="sticky bottom-0 mt-8 flex items-center gap-3 border-t border-gray-200 bg-white py-4">
         <button onClick={save} className="btn-primary">Save changes</button>
         {saved && (
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-900">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
             Saved
           </span>

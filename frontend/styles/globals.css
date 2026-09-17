@@ -13,7 +13,8 @@ body {
 }
 
 ::selection {
-  background: rgba(5, 150, 105, 0.14);
+  background: rgba(24, 24, 27, 0.85);
+  color: #fafafa;
 }
 
 /* ---------- Design system ---------- */
@@ -60,11 +61,11 @@ body {
   }
 
   .chip-accent {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-100 bg-brand-50 px-2.5 py-0.5 text-[11px] font-medium text-brand-700;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-0.5 text-[11px] font-medium text-ink-700;
   }
 
   .chip-success {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-100 px-2.5 py-0.5 text-[11px] font-medium text-ink-900;
   }
 
   .chip-warning {
