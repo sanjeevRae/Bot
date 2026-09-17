@@ -17,6 +17,13 @@ class Chitra_AI_Chat {
         add_action('admin_menu', [$this, 'add_admin_page']);
         add_action('admin_init', [$this, 'register_settings']);
         add_action('wp_footer', [$this, 'render_widget']);
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
+            array_unshift(
+                $links,
+                '<a href="' . esc_url(admin_url('options-general.php?page=chitra-ai-chat')) . '">Settings</a>'
+            );
+            return $links;
+        });
     }
 
     /** Settings page under WP Admin → Settings → Chitra AI */
@@ -31,8 +38,26 @@ class Chitra_AI_Chat {
     }
 
     public function register_settings() {
-        register_setting('chitra_ai_chat', 'chitra_org_id');
-        register_setting('chitra_ai_chat', 'chitra_api_url');
+        register_setting('chitra_ai_chat', 'chitra_org_id', [
+            'type'              => 'string',
+            'sanitize_callback' => function ($v) {
+                // Accept a raw UUID, or a pasted widget URL/script tag — pull
+                // the org param out of whatever was pasted.
+                $v = trim(wp_unslash((string) $v));
+                if (preg_match('/[?&]org=([0-9a-fA-F-]{8,64})/', $v, $m)) {
+                    $v = $m[1];
+                }
+                return sanitize_text_field($v);
+            },
+        ]);
+        register_setting('chitra_ai_chat', 'chitra_api_url', [
+            'type'              => 'string',
+            'sanitize_callback' => function ($v) {
+                $v = esc_url_raw(trim((string) $v));
+                return $v ? untrailingslashit($v) : '';
+            },
+            'default'           => 'https://chitra-ai-backend-p6ex.onrender.com',
+        ]);
     }
 
     public function render_admin_page() {
@@ -43,6 +68,11 @@ class Chitra_AI_Chat {
         <div class="wrap">
             <h1>Chitra AI Chat</h1>
             <p>Add your AI assistant chat widget to every page of this site.</p>
+            <?php if (!$org_id) : ?>
+                <div class="notice notice-warning"><p>
+                    <strong>No Org ID yet.</strong> Paste it below and save — the chat bubble appears on your site immediately.
+                </p></div>
+            <?php endif; ?>
             <form method="post" action="options.php">
                 <?php settings_fields('chitra_ai_chat'); ?>
                 <table class="form-table">
@@ -52,7 +82,7 @@ class Chitra_AI_Chat {
                             <input name="chitra_org_id" id="chitra_org_id" type="text"
                                    value="<?php echo $org_id; ?>" class="regular-text"
                                    placeholder="e.g. 9f8c1a2b-..." />
-                            <p class="description">Find it in your Chitra dashboard under “Install on your site”.</p>
+                            <p class="description">Find it in your Chitra dashboard under &ldquo;Install on your site&rdquo;. Pasting the whole install snippet works too — the Org ID is extracted automatically.</p>
                         </td>
                     </tr>
                     <tr>
@@ -72,9 +102,13 @@ class Chitra_AI_Chat {
 
     /** Inject the widget loader into the footer when configured. */
     public function render_widget() {
-        $org_id  = get_option('chitra_org_id');
-        $api_url = untrailingslashit(get_option('chitra_api_url', 'https://chitra-ai-backend-p6ex.onrender.com'));
-        if (!$org_id) return;
+        $default_api = 'https://chitra-ai-backend-p6ex.onrender.com';
+        $org_id  = trim((string) get_option('chitra_org_id'));
+        $api_url = untrailingslashit((string) get_option('chitra_api_url', $default_api));
+        if ($org_id === '') return;
+        // Defence in depth: only http(s) URLs — WordPress's esc_url() already
+        // blocks javascript: etc., but don't rely on it alone.
+        if (!preg_match('#^https?://#i', $api_url)) $api_url = $default_api;
 
         printf(
             '<script src="%s/widget.js?org=%s" defer></script>',
