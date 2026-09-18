@@ -303,7 +303,6 @@ router.get('/widget.js', async (req, res) => {
       typing.remove();
       addMsg('Connection error. Please try again.','bot');
     });
-    });
   };
 })();`);
 });
@@ -325,6 +324,16 @@ router.get(['/bot/:orgId', '/'], async (req, res) => {
 
   if (!org) return res.status(404).send('Business not found');
 
+  // Same branding as the embeddable widget, so the direct link matches the site.
+  const { data: botSettings } = await supabaseAdmin
+    .from('settings')
+    .select('brand_color, bot_name, welcome_message')
+    .eq('organization_id', orgId)
+    .maybeSingle();
+
+  const brandColor = /^#[0-9a-fA-F]{6}$/.test(botSettings?.brand_color || '') ? botSettings.brand_color : '#059669';
+  const welcome = (botSettings?.welcome_message || 'Hi! How can I help you today?').trim();
+
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   res.type('html').send(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content"/>
@@ -335,12 +344,12 @@ body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;j
 #chat{width:100%;max-width:480px;height:100vh;height:100dvh;display:flex;flex-direction:column;background:#fff}
 #msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 .msg{max-width:85%;padding:10px 14px;border-radius:14px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word}
-.bot{background:#f3f4f6;align-self:flex-start}.user{background:#6366f1;color:#fff;align-self:flex-end}
+.bot{background:#f3f4f6;align-self:flex-start}.user{background:${brandColor};color:#fff;align-self:flex-end}
 .msg table{max-width:100%}
 .msg pre{max-width:100%}
 form{display:flex;border-top:1px solid #e5e7eb;background:#fff;padding-bottom:env(safe-area-inset-bottom)}
 input{flex:1;min-width:0;border:none;padding:16px;font-size:16px;outline:none}
-button{border:none;background:#6366f1;color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
+button{border:none;background:${brandColor};color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
 h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bottom:1px solid #eee}
 </style></head><body><div id="chat">
 <h1>💬 ${org.name}</h1><div id="msgs"></div>
@@ -367,7 +376,7 @@ return ensureS().then(function(s2){
 return fetch("${backendUrl}/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
 body:JSON.stringify({orgId:"${orgId}",sessionId:s2.id,sessionToken:s2.token,message:text})});});}
 return r;}).then(function(r){return r.json();});}
-var BRAND = '#6366f1';
+var BRAND = ${JSON.stringify(brandColor)};
   /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,
      links (md + <autolinks> + bare URLs), lists, tables, blockquotes, hr */
   function esc(s){
@@ -490,16 +499,18 @@ var BRAND = '#6366f1';
   }
 
 function add(t,w){var d=document.createElement('div');d.className='msg '+w;if(w==='bot'){renderMd(d,t);}else{d.textContent=t;}msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
-add('Hi! How can I help you today?','bot');
+add(${JSON.stringify(welcome)},'bot');
 // Keep the input visible & conversation pinned when the mobile keyboard opens
 var inEl=document.getElementById('in');
 inEl.addEventListener('focus',function(){setTimeout(function(){msgs.scrollTop=msgs.scrollHeight;},300);});
 inEl.addEventListener('input',function(){msgs.scrollTop=msgs.scrollHeight;});
 document.querySelector('form').onsubmit=function(e){e.preventDefault();
 var i=document.getElementById('in'),t=i.value.trim();if(!t)return;i.value='';add(t,'user');
-sendMsg(t)
+var typing=document.createElement('div');typing.className='msg bot';typing.textContent='\\u2026';
+msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;
+sendMsg(t).then(function(d){typing.remove();add(d.reply||d.error||'Error','bot')})
+.catch(function(){typing.remove();add('Connection error. Please try again.','bot')});
 };
-.then(function(d){add(d.reply||d.error||'Error','bot')}).catch(function(){add('Connection error. Please try again.','bot')});
 </script></body></html>`);
 });
 
