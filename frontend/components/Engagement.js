@@ -19,9 +19,9 @@ const TargetIcon = () => (<Icon><circle cx="12" cy="12" r="10" /><circle cx="12"
  *  routes open straight into their own tab (see those pages). */
 const TABS = [
   ['all', 'All'],
-  ['inbox', 'Inbox'],
-  ['bookings', 'Bookings'],
   ['leads', 'Leads'],
+  ['bookings', 'Bookings'],
+  ['inbox', 'Inbox'],
 ];
 
 /**
@@ -87,7 +87,7 @@ export default function Engagement({ initialTab = 'all' }) {
         <p className="eyebrow mb-1">Customer engagement</p>
         <h1 className="h-display text-3xl">Engagement</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-500">
-          Everything your bot captured with customers — escalated conversations, bookings and leads — in one place.
+          Everything your bot captured with customers — leads, bookings and escalated conversations — in one place.
         </p>
       </div>
 
@@ -112,9 +112,9 @@ export default function Engagement({ initialTab = 'all' }) {
           {/* Overview counts */}
           <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
-              ['Pending escalations', stat(summary?.pending), 'waiting for a human', <MessageIcon key="m" />],
-              ['Bookings', stat(summary?.bookings), `${summary ? summary.confirmed : '—'} confirmed`, <CalendarIcon key="c" />],
               ['Leads captured', stat(summary?.leads), 'shared contact details', <TargetIcon key="t" />],
+              ['Bookings', stat(summary?.bookings), `${summary ? summary.confirmed : '—'} confirmed`, <CalendarIcon key="c" />],
+              ['Pending escalations', stat(summary?.pending), 'waiting for a human', <MessageIcon key="m" />],
             ].map(([label, value, hint, icon]) => (
               <div key={label} className="glass-hover p-5">
                 <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border border-white/70 bg-white/60 shadow-soft backdrop-blur">{icon}</div>
@@ -127,16 +127,16 @@ export default function Engagement({ initialTab = 'all' }) {
 
           {/* The three sections, each capped to the latest few with a jump link */}
           <div className="space-y-14">
-            <EngagementInbox preview={3} onViewAll={() => selectTab('inbox')} />
-            <EngagementBookings preview={3} onViewAll={() => selectTab('bookings')} />
             <EngagementLeads preview={3} onViewAll={() => selectTab('leads')} />
+            <EngagementBookings preview={3} onViewAll={() => selectTab('bookings')} />
+            <EngagementInbox preview={3} onViewAll={() => selectTab('inbox')} />
           </div>
         </>
       )}
 
-      {tab === 'inbox' && <EngagementInbox />}
-      {tab === 'bookings' && <EngagementBookings />}
       {tab === 'leads' && <EngagementLeads />}
+      {tab === 'bookings' && <EngagementBookings />}
+      {tab === 'inbox' && <EngagementInbox />}
     </main>
   );
 }
