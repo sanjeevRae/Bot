@@ -85,7 +85,9 @@ export default function Home() {
     <main>
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-20">
-        <h1 className="h-display max-w-5xl text-4xl leading-[1.05] sm:text-6xl lg:text-[80px]">
+        {/* Hero headline — Suisse Intl Book stack (see fontFamily.suisse).
+            font-normal = "Book"; Arial has no Book cut, so it renders Arial Regular. */}
+        <h1 className="h-display max-w-5xl font-suisse text-4xl font-normal leading-[1.05] tracking-[-0.01em] sm:text-6xl lg:text-[80px]">
           Stop Losing Customers to Slow Replies.
         </h1>
 
