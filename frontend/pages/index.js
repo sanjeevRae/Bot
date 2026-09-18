@@ -102,7 +102,7 @@ export default function Home() {
             side stays open. The negative right margin only applies at xl+, where the
             6xl container leaves enough slack that nothing overflows the viewport. */}
         <div className="mt-24 flex sm:mt-32 md:mt-40 md:justify-end">
-          <div className="w-full md:w-[46%]">
+          <div className="w-full md:w-[52%]">
             <p className="text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
               You know how customers expect instant answers, even when your team
               is busy running the business?
