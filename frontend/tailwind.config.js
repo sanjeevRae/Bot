@@ -18,6 +18,12 @@ module.exports = {
       },
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+        // Hero headline face — Suisse Intl Book (licensed/local; used when installed)
+        // with the closest universally-available neutral grotesques behind it.
+        // To activate the real font: drop the woff2 files in frontend/public/fonts and
+        // add an @font-face block to styles/globals.css, e.g.
+        //   @font-face { font-family: 'Suisseintl Book'; src: url('/fonts/SuisseIntl-Book.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+        suisse: ['"Suisseintl Book"', '"Suisse Intl"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
       },
       boxShadow: {
         sm: '0 1px 2px rgba(17,24,39,0.05)',
