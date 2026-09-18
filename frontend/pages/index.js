@@ -87,20 +87,20 @@ export default function Home() {
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-20">
         {/* Hero headline — Suisse Intl Book stack (see fontFamily.suisse).
             font-normal = "Book"; Arial has no Book cut, so it renders Arial Regular. */}
-        <h1 className="h-display max-w-5xl font-suisse text-4xl font-normal leading-[1.05] tracking-[-0.01em] sm:text-6xl lg:text-[80px]">
+        <h1 className="h-display max-w-5xl pt-4 font-suisse text-4xl font-normal leading-[1.05] tracking-[-0.01em] sm:pt-6 sm:text-6xl lg:text-[80px]">
           Stop Losing Customers to Slow Replies.
         </h1>
 
         <Link
           href="/signup"
-          className="mt-8 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2"
+          className="mt-10 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 sm:mt-14"
         >
           Get Started
         </Link>
 
-        {/* Copy + gif — sits on the right half, pushed down, on desktop */}
+        {/* Copy + gif — sits on the right, pushed down, on desktop */}
         <div className="mt-20 flex sm:mt-28 md:mt-36 md:justify-end">
-          <div className="w-full md:w-1/2">
+          <div className="w-full md:w-[56%]">
             <p className="text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
               You know how customers expect instant answers, even when your team
               is busy running the business?
