@@ -76,9 +76,7 @@ export default function App({ Component, pageProps }) {
               {[
                 ['/dashboard', 'Dashboard'],
                 ['/knowledge', 'Knowledge'],
-                ['/bookings', 'Bookings'],
-                ['/leads', 'Leads'],
-                ['/inbox', 'Inbox'],
+                ['/engagement', 'Engagement'],
                 ['/channels', 'Channels'],
                 ['/agency', 'Clients'],
                 ['/billing', 'Billing'],
@@ -126,8 +124,7 @@ export default function App({ Component, pageProps }) {
               {[
                 ['/dashboard', 'Home'],
                 ['/knowledge', 'Docs'],
-                ['/bookings', 'Bookings'],
-                ['/leads', 'Leads'],
+                ['/engagement', 'Engagement'],
                 ['/settings', 'Settings'],
               ].map(([href, label]) => (
                 <Link
