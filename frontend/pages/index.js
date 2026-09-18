@@ -414,8 +414,7 @@ export default function Home() {
               ]],
               ['Resources', [
                 ['Pricing', '/#pricing'],
-                ['Bookings', '/bookings'],
-                ['Leads', '/leads'],
+                ['Engagement', '/engagement'],
                 ['Settings', '/settings'],
               ]],
             ].map(([title, links]) => (
