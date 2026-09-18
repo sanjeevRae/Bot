@@ -84,33 +84,36 @@ export default function Home() {
   return (
     <main>
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-4 pb-10 pt-12 text-center sm:px-6 sm:pb-10 sm:pt-12">
-        <span className="chip mb-6">Free trial · No credit card required</span>
-        <h1 className="h-display mx-auto mb-5 max-w-3xl text-4xl leading-[1.1] sm:text-5xl md:text-[56px]">
-          AI Assistant That Sells,
-          <br />
-          Books &amp; Never Sleeps
+      <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-20">
+        <h1 className="h-display max-w-5xl text-4xl leading-[1.05] sm:text-6xl lg:text-[80px]">
+          Stop Losing Customers to Slow Replies.
         </h1>
-        <p className="mx-auto mb-8 max-w-xl text-base leading-relaxed text-ink-500 sm:text-lg">
-          From first question to confirmed booking — let AI handle your customers
-          around the clock, seamlessly.
-        </p>
-        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link href="/signup" className="btn-primary w-full px-7 py-3 sm:w-auto">
-            Get Started Free
-          </Link>
-          <Link href="/#how" className="btn-secondary w-full px-7 py-3 sm:w-auto">
-            See how it works
-          </Link>
+
+        <Link
+          href="/signup"
+          className="mt-8 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2"
+        >
+          Get Started
+        </Link>
+
+        {/* Copy + gif — sits on the right half, pushed down, on desktop */}
+        <div className="mt-20 flex sm:mt-28 md:mt-36 md:justify-end">
+          <div className="w-full md:w-1/2">
+            <p className="text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
+              You know how customers expect instant answers, even when your team
+              is busy running the business?
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
+              We help businesses capture more customers with AI-powered support,
+              lead generation, and automated bookings — while saving time.
+            </p>
+
+            {/* Gif container — drop your gif inside this div, e.g.
+                <img src="/hero.gif" alt="Chitra AI demo" className="h-full w-full object-cover" /> */}
+            <div id="hero-gif" className="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-ink-900" />
+          </div>
         </div>
       </section>
-
-      {/* Hero image */}
-      <img
-        src="https://res.cloudinary.com/dngbvnleh/image/upload/v1787640706/Your_paragraph_text_elscbq.png"
-        alt="Chitra AI assistant"
-        className="block w-full"
-      />
 
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
