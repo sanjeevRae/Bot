@@ -101,8 +101,8 @@ export default function Home() {
         {/* Copy + gif — pushed down, and shifted right on wide screens so the left
             side stays open. The negative right margin only applies at xl+, where the
             6xl container leaves enough slack that nothing overflows the viewport. */}
-        <div className="mt-24 flex sm:mt-32 md:mt-40 md:justify-end xl:-mr-16 2xl:-mr-40">
-          <div className="w-full md:w-[56%]">
+        <div className="mt-24 flex sm:mt-32 md:mt-40 md:justify-end xl:-mr-16 2xl:-mr-24">
+          <div className="w-full md:w-1/2">
             <p className="text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
               You know how customers expect instant answers, even when your team
               is busy running the business?
