@@ -1,4 +1,5 @@
 ﻿import Link from 'next/link';
+import { useEffect } from 'react';
 import DemoWidget from '../components/DemoWidget';
 
 /* Inline SVG icon set (Lucide-style strokes) */
@@ -81,25 +82,64 @@ function SectionHeader({ eyebrow, title, text, dark = false }) {
 export default function Home() {
   const demoOrgId = process.env.NEXT_PUBLIC_DEMO_ORG_ID;
 
+  /* Scroll-driven hero-gif expansion:
+     As the gif box scrolls into view it grows leftward until its left edge
+     lines up with the h1's left edge (right edge stays pinned). Fully
+     reversible when scrolling back up. Desktop only. */
+  useEffect(() => {
+    const gif = document.getElementById('hero-gif');
+    const h1 = document.querySelector('main > section h1');
+    if (!gif || !h1) return undefined;
+    if (window.matchMedia('(max-width: 767px)').matches) return undefined;
+
+    const column = gif.parentElement; // the md:w-[52%] wrapper
+    let raf = 0;
+
+    const update = () => {
+      raf = 0;
+      const colRect = column.getBoundingClientRect();
+      const base = colRect.width; // resting width
+      const full = colRect.right - h1.getBoundingClientRect().left; // left edge at h1's left
+      const delta = Math.max(0, full - base);
+      // 0 at the top of the page, 1 once scrolled ~600px (gif centered in view)
+      const p = Math.min(1, Math.max(0, (window.scrollY - 120) / 480));
+      gif.style.width = `${base + delta * p}px`;
+      gif.style.transform = `translateX(-${delta * p}px)`; // grow leftward, right edge pinned
+    };
+
+    const onScroll = () => {
+      if (!raf) raf = window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) window.cancelAnimationFrame(raf);
+      gif.style.width = '';
+    };
+  }, []);
+
   return (
     <main>
       {/* Hero */}
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-20">
-        {/* Hero headline — Suisse Intl Book stack (see fontFamily.suisse).
-            font-normal = "Book"; Arial has no Book cut, so it renders Arial Regular. */}
-        <h1 className="h-display max-w-5xl pt-7 pb-7 font-suisse text-4xl font-medium leading-[1.05] tracking-[-0.01em] sm:pt-6 sm:text-6xl lg:text-[80px]">
+        
+        <h1 className="h-display max-w-5xl pt-12 pb-4 font-suisse text-4xl font-medium leading-[1.05] tracking-[-0.01em] sm:pt-6 sm:text-6xl lg:text-[80px]">
           Stop Losing Customers to Slow Replies.
         </h1>
 
         <Link
           href="/signup"
-          className="mt-8 mb-12 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 sm:mt-14"
+          className="mt-8 mb-10 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 sm:mt-14"
         >
           Get Started
         </Link>
 
         
-        <div className="mt-24 flex sm:mt-32 md:mt-40 md:justify-end">
+        <div className="mt-28 flex sm:mt-32 md:mt-44 md:justify-end">
           <div className="w-full md:w-[52%]">
             <p className="text-justify text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
             You know how customers expect instant answers, even when your team
@@ -111,9 +151,8 @@ export default function Home() {
               lead generation, and automated bookings — while saving time.
             </p>    
 
-            {/* Gif container — drop your gif inside this div, e.g.
-                <img src="/hero.gif" alt="Chitra AI demo" className="h-full w-full object-cover" /> */}
-            <div id="hero-gif" className="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-ink-900" />
+            {/* Gif div */}
+            <div id="hero-gif" className="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-ink-900 transition-[width,transform] duration-300 ease-out" />
           </div>
         </div>
       </section>
