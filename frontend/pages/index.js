@@ -152,8 +152,56 @@ export default function Home() {
             </p>    
 
             {/* Gif div */}
-            <div id="hero-gif" className="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-ink-900 transition-[width,transform] duration-300 ease-out" />
+            <div id="hero-gif" className="mt-8 aspect-video w-full overflow-hidden rounded-xl bg-ink-900 transition-[width,transform] duration-300 ease-out" />
           </div>
+        </div>
+      </section>
+
+
+
+
+      {/* Who it's for */}
+      <section className="mx-auto max-w-6xl px-5 pb-4 pt-8 sm:px-6 sm:pt-12">
+        <div className="grid gap-10 md:grid-cols-2 md:gap-16">
+          <div>
+            <h2 className="h-display font-suisse text-4xl font-medium leading-[1.1] tracking-[-0.01em] sm:text-5xl lg:text-[56px]">
+              Who Chitra AI is best for.
+            </h2>
+          </div>
+          <ul className="space-y-7">
+            {[
+              {
+                marker: '◆',
+                lead: 'Entrepreneurs',
+                text: ' ready to turn customer conversations into new opportunities, leads, bookings, and sales.',
+              },
+              {
+                marker: '■',
+                lead: 'Founders & startups',
+                text: ' looking to scale customer engagement without adding more people to handle every conversation.',
+              },
+              {
+                marker: '▲',
+                lead: 'Sales teams',
+                text: ' wanting to respond faster, qualify leads automatically, and spend more time closing opportunities.',
+              },
+              {
+                marker: '●',
+                lead: 'Growing teams',
+                text: ' ready to let AI handle repetitive conversations while they focus on building what comes next.',
+              },
+            ].map((item) => (
+              <li key={item.lead} className="flex items-start gap-3.5">
+                <span aria-hidden="true" className="mt-[9px] inline-block text-[11px] leading-none text-ink-900">
+                  {item.marker}
+                </span>
+                <p className="text-[15px] leading-relaxed text-ink-500 sm:text-[17px]">
+                  <span className="font-semibold text-ink-900">{item.lead}</span>
+                  {item.text}
+                </p>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
