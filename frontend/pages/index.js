@@ -1,71 +1,52 @@
 ﻿import Link from 'next/link';
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import DemoWidget from '../components/DemoWidget';
 
-/* Inline SVG icon set (Lucide-style strokes) */
-const Icon = ({ children }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="text-brand-600"
-  >
-    {children}
-  </svg>
-);
-
-const Icons = {
-  brain: (
-    <Icon>
-      <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
-      <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
-      <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
-    </Icon>
+/* Feature glyphs — the exact artwork supplied for this section: leaf, sparkle,
+   lightning, star. Each viewBox is tight to its own path, so only the ink height
+   has to be set; heights are in px at the 14px body this section uses. */
+const FeatureIcons = {
+  leaf: (
+    <svg viewBox="0.1445 3.4277 15.7143 17.1429" className="h-[15px] w-auto fill-current" aria-hidden="true">
+      <path d="M15.8588 4.14202V5.92773C15.8563 7.47794 15.2611 8.9685 14.1952 10.0941C13.1293 11.2197 11.6733 11.8951 10.1255 11.982C10.0327 10.0812 9.21807 8.28753 7.84782 6.96695C8.33226 5.91213 9.10878 5.0182 10.0855 4.39097C11.0621 3.76374 12.1981 3.42947 13.3588 3.42773H15.1445C15.334 3.42773 15.5157 3.50299 15.6496 3.63694C15.7836 3.7709 15.8588 3.95258 15.8588 4.14202ZM2.64453 6.28488H0.858817C0.669377 6.28488 0.487695 6.36013 0.353741 6.49409C0.219786 6.62804 0.144531 6.80972 0.144531 6.99916V8.78488C0.146422 10.3945 0.786695 11.9377 1.9249 13.0759C3.0631 14.2141 4.6063 14.8544 6.21596 14.8563H7.28739V19.8563C7.28739 20.0457 7.36264 20.2274 7.4966 20.3614C7.63055 20.4953 7.81223 20.5706 8.00167 20.5706C8.19111 20.5706 8.3728 20.4953 8.50675 20.3614C8.64071 20.2274 8.71596 20.0457 8.71596 19.8563V12.3563C8.71407 10.7466 8.0738 9.20345 6.93559 8.06525C5.79739 6.92704 4.25419 6.28677 2.64453 6.28488Z" />
+    </svg>
   ),
-  calendar: (
-    <Icon>
-      <rect width="18" height="18" x="3" y="4" rx="2" />
-      <path d="M16 2v4" />
-      <path d="M8 2v4" />
-      <path d="M3 10h18" />
-    </Icon>
+  sparkle: (
+    <svg viewBox="0 2.3613 16.2775 16.2774" className="h-[14px] w-auto fill-current" aria-hidden="true">
+      <path d="M15.5807 9.64214C12.2742 8.94898 9.6898 6.36456 8.99674 3.058C8.91161 2.6521 8.5536 2.36133 8.13875 2.36133C7.7239 2.36133 7.36589 2.6521 7.28081 3.05806C6.58771 6.36456 4.00329 8.94893 0.696782 9.64198C0.290828 9.72706 0 10.0851 0 10.4999C0 10.9147 0.290774 11.2728 0.696782 11.3579C4.00324 12.051 6.58755 14.6354 7.28065 17.9419C7.36573 18.3478 7.72374 18.6387 8.13859 18.6387C8.55339 18.6387 8.91145 18.3479 8.99653 17.9419C9.68969 14.6354 12.2742 12.051 15.5807 11.358C15.9866 11.2729 16.2775 10.9149 16.2775 10.5001C16.2774 10.0853 15.9866 9.72722 15.5807 9.64214Z" />
+    </svg>
   ),
-  target: (
-    <Icon>
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </Icon>
+  bolt: (
+    <svg viewBox="-0.0107 1.248 13.873 17.1486" className="h-[15px] w-auto fill-current" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M8.93812 1.33905C9.05079 1.40549 9.13922 1.51 9.18929 1.63589C9.23936 1.76179 9.24819 1.90182 9.21438 2.03366L7.68147 7.98752H13.2744C13.3869 7.98753 13.4969 8.02235 13.591 8.08771C13.685 8.15308 13.759 8.24613 13.8038 8.35543C13.8486 8.46473 13.8623 8.58551 13.8432 8.70294C13.824 8.82036 13.7729 8.92931 13.6962 9.01638L5.61603 18.1881C5.52803 18.2882 5.41087 18.3542 5.28331 18.3754C5.15574 18.3966 5.02514 18.3719 4.91238 18.3053C4.79963 18.2386 4.71123 18.1338 4.66134 18.0076C4.61145 17.8814 4.60295 17.7412 4.63718 17.6092L6.1701 11.6562H0.577115C0.464639 11.6562 0.354616 11.6214 0.26057 11.556C0.166525 11.4906 0.0925563 11.3976 0.0477569 11.2883C0.00295745 11.179 -0.0107202 11.0582 0.00840534 10.9408C0.0275309 10.8234 0.078626 10.7144 0.15541 10.6273L8.23553 1.45564C8.32354 1.35589 8.44053 1.29021 8.56786 1.26908C8.69519 1.24796 8.82553 1.27259 8.93812 1.33905Z"
+      />
+    </svg>
   ),
-  puzzle: (
-    <Icon>
-      <path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.877-.29c-.493.074-.84.504-1.02.968a2.5 2.5 0 1 1-3.237-3.237c.464-.18.894-.527.967-1.02a1.026 1.026 0 0 0-.289-.877l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704L4.23 8.77c.24-.24.581-.353.917-.303.515.077.877.528 1.073 1.01a2.5 2.5 0 1 0 3.259-3.259c-.482-.196-.933-.558-1.01-1.073-.05-.336.062-.676.303-.917l1.525-1.525A2.402 2.402 0 0 1 12 1.998c.617 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.877.29.493-.074.84-.504 1.02-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.18-.894.527-.967 1.02Z" />
-    </Icon>
-  ),
-  shield: (
-    <Icon>
-      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-      <path d="m9 12 2 2 4-4" />
-    </Icon>
-  ),
-  zap: (
-    <Icon>
-      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
-    </Icon>
+  star: (
+    <svg viewBox="0.416 2 16.168 15.3766" className="h-[14px] w-auto fill-current" aria-hidden="true">
+      <path d="M8.5 2L11.2129 6.76598L16.584 7.87336L12.8896 11.9263L13.4962 17.3766L8.5 15.1155L3.50382 17.3766L4.11039 11.9263L0.416016 7.87336L5.78707 6.76598L8.5 2Z" />
+    </svg>
   ),
 };
 
+/* Feature cards — module scope so the array identity is stable across renders
+   (the indicator line indexes into it to find the hovered column). */
+const FEATURES = [
+  { icon: FeatureIcons.leaf, title: 'Learns your business', text: 'Point it at your website, upload a PDF, or paste FAQs. It builds its own knowledge base.' },
+  { icon: FeatureIcons.sparkle, title: 'Books appointments', text: 'Customers book right in the chat. You get notified instantly.' },
+  { icon: FeatureIcons.bolt, title: 'Captures leads', text: 'Every interested visitor becomes a lead in your dashboard.' },
+  { icon: FeatureIcons.star, title: 'Installs anywhere', text: 'One script tag for any website, WordPress plugin, or QR code link.' },
+];
+
 /* Reusable section header */
-function SectionHeader({ eyebrow, title, text, dark = false }) {
+function SectionHeader({ eyebrow, title, text, dark = false, eyebrowClassName = '' }) {
   return (
     <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
       {eyebrow && (
-        <p className={`eyebrow mb-3 ${dark ? '!text-brand-300' : ''}`}>{eyebrow}</p>
+        <p className={`eyebrow mb-3 ${dark ? '!text-brand-300' : ''} ${eyebrowClassName}`}>{eyebrow}</p>
       )}
       <h2 className={`h-display mb-4 text-3xl leading-tight sm:text-4xl ${dark ? 'text-white' : ''}`}>
         {title}
@@ -81,6 +62,47 @@ function SectionHeader({ eyebrow, title, text, dark = false }) {
 
 export default function Home() {
   const demoOrgId = process.env.NEXT_PUBLIC_DEMO_ORG_ID;
+  // Which "Who it's for" row is hovered — drives the geometric marker spin.
+  const [activeMarker, setActiveMarker] = useState(null);
+  // Which feature card is hovered — drives its icon's spin-and-lift and the
+  // indicator line under the grid.
+  const [activeFeature, setActiveFeature] = useState(null);
+  // Measured x/width of each feature column, so the indicator can slide between them.
+  const featureGridRef = useRef(null);
+  const featureTrackRef = useRef(null);
+  const [featureCols, setFeatureCols] = useState(null);
+
+  useEffect(() => {
+    const grid = featureGridRef.current;
+    const track = featureTrackRef.current;
+    if (!grid || !track) return undefined;
+
+    const measure = () => {
+      const trackLeft = track.getBoundingClientRect().left;
+      setFeatureCols(
+        [...grid.children].map((col) => {
+          const r = col.getBoundingClientRect();
+          return { left: r.left - trackLeft, width: r.width };
+        })
+      );
+    };
+
+    measure();
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      ro.observe(grid);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+
+  // No hover (or a hover leaving the grid) parks the indicator on the first card.
+  const activeFeatureIndex = Math.max(0, FEATURES.findIndex((f) => f.title === activeFeature));
+  const indicator = featureCols ? featureCols[activeFeatureIndex] : null;
 
   /* Scroll-driven hero-gif expansion:
      As the gif box scrolls into view it grows leftward until its left edge
@@ -161,41 +183,56 @@ export default function Home() {
 
 
       {/* Who it's for */}
-      <section className="mx-auto max-w-6xl px-5 pb-4 pt-8 sm:px-6 sm:pt-12">
-        <div className="grid gap-10 md:grid-cols-2 md:gap-16">
+      <section className="mx-auto max-w-6xl px-5 pt-24 pb-16 sm:px-6 sm:pt-32 lg:pt-36">
+        <div className="grid gap-12 md:grid-cols-2 md:gap-16">
           <div>
-            <h2 className="h-display font-suisse text-4xl font-medium leading-[1.1] tracking-[-0.01em] sm:text-5xl lg:text-[56px]">
+            <h2 className="h-display max-w-[7em] font-suisse text-[22px] font-medium leading-[1.1] tracking-[-0.01em] sm:text-[40px] lg:text-[48px]">
               Who Chitra AI is best for.
             </h2>
           </div>
-          <ul className="space-y-7">
+          <ul className="space-y-[27px]">
             {[
               {
-                marker: '◆',
+                markerPath: 'M12 0L24 12L12 24L0 12L12 0Z',
+                markerSize: 'h-[0.68em] w-[0.68em]',
                 lead: 'Entrepreneurs',
                 text: ' ready to turn customer conversations into new opportunities, leads, bookings, and sales.',
               },
               {
-                marker: '■',
+                markerPath: 'M0 0L24 0L24 24L0 24L0 0Z',
                 lead: 'Founders & startups',
                 text: ' looking to scale customer engagement without adding more people to handle every conversation.',
               },
               {
-                marker: '▲',
+                markerPath: 'M12 0L24 24L0 24L12 0Z',
                 lead: 'Sales teams',
                 text: ' wanting to respond faster, qualify leads automatically, and spend more time closing opportunities.',
               },
               {
-                marker: '●',
+                markerPath: 'M0 12A12 12 0 0 1 24 12A12 12 0 0 1 0 12Z',
                 lead: 'Growing teams',
                 text: ' ready to let AI handle repetitive conversations while they focus on building what comes next.',
               },
             ].map((item) => (
-              <li key={item.lead} className="flex items-start gap-3.5">
-                <span aria-hidden="true" className="mt-[9px] inline-block text-[11px] leading-none text-ink-900">
-                  {item.marker}
+              <li key={item.lead} className="flex items-start gap-4 text-[14px] sm:text-[18px]">
+                {/* Geometric marker */}
+                <span aria-hidden="true" className="flex h-[1.35em] shrink-0 items-center [perspective:300px]">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className={`${
+                      item.markerSize || 'h-[0.55em] w-[0.55em]'
+                    } fill-ink-900 transition-transform duration-500 ease-out ${
+                      activeMarker === item.lead ? '[transform:rotateY(180deg)]' : ''
+                    }`}
+                  >
+                    <path d={item.markerPath} />
+                  </svg>
                 </span>
-                <p className="text-[15px] leading-relaxed text-ink-500 sm:text-[17px]">
+                <p
+                  className="leading-[1.35] text-ink-500"
+                  onMouseEnter={() => setActiveMarker(item.lead)}
+                  onMouseLeave={() => setActiveMarker((cur) => (cur === item.lead ? null : cur))}
+                >
                   <span className="font-semibold text-ink-900">{item.lead}</span>
                   {item.text}
                 </p>
@@ -205,30 +242,63 @@ export default function Home() {
         </div>
       </section>
 
+      <div aria-hidden="true" className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
+        <div className="h-px w-full bg-gray-200" />
+      </div>
+
       {/* Features */}
-      <section id="features" className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
-        <SectionHeader
-          eyebrow="Why Chitra"
-          title="Everything your business needs"
-          text="One assistant that learns your business and works for you 24/7."
-        />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-          {[
-            { icon: Icons.brain, title: 'Learns your business', text: 'Point it at your website, upload a PDF, or paste FAQs. It builds its own knowledge base.' },
-            { icon: Icons.calendar, title: 'Books appointments', text: 'Customers book right in the chat. You get notified instantly.' },
-            { icon: Icons.target, title: 'Captures leads', text: 'Every interested visitor becomes a lead in your dashboard.' },
-            { icon: Icons.puzzle, title: 'Installs anywhere', text: 'One script tag for any website, WordPress plugin, or QR code link.' },
-            { icon: Icons.shield, title: 'Private by design', text: 'Row-level security keeps every business’s data fully isolated.' },
-            { icon: Icons.zap, title: 'Fast & free', text: 'Powered by Groq’s lightning inference. Generous free tier, upgrade only when you grow.' },
-          ].map((f) => (
-            <div key={f.title} className="card p-6 transition-colors duration-150 hover:border-gray-300">
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-brand-100 bg-brand-50">
-                {f.icon}
+      <section id="features" className="mx-auto max-w-6xl px-5 sm:px-6">
+        <h2 className="h-display mb-19 max-w-[14em] font-suisse text-[24px] font-medium leading-[1.12] tracking-[-0.02em] sm:mb-16 sm:text-[30px] lg:mb-[74px] lg:text-[34px]">
+          Everything your business needs
+        </h2>
+        <div
+          ref={featureGridRef}
+          className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4"
+          onMouseLeave={() => setActiveFeature(null)}
+        >
+          {FEATURES.map((f) => (
+            <div key={f.title} onMouseEnter={() => setActiveFeature(f.title)}>
+              {/* Mark turns a half turn left-to-right and holds a few px higher while the
+                  card is hovered, then eases back to rest on leave. The perspective lives
+                  on the row, so the turn reads in 3D instead of just flattening. */}
+              <div className="mb-3.5 mt-5 flex h-[15px] items-end text-ink-900 [perspective:300px]">
+                <span
+                  className={`inline-flex transition-transform duration-500 ease-out ${
+                    activeFeature === f.title ? '[transform:rotateY(180deg)_translateY(-4px)]' : ''
+                  }`}
+                >
+                  {f.icon}
+                </span>
               </div>
-              <h3 className="mb-1.5 text-[15px] font-semibold text-ink-900">{f.title}</h3>
-              <p className="text-sm leading-relaxed text-ink-500">{f.text}</p>
+              <h3 className="mb-0.5 text-[17px] font-medium text-ink-900">{f.title}</h3>
+              <p className="pb-10 text-[15.5px] leading-[1.5] text-ink-500">{f.text}</p>
             </div>
           ))}
+        </div>
+
+        {/* Indicator line — closes the section: hairline track flush with its bottom
+            edge, with a marker that rests under the first column and slides to
+            whichever column the pointer is over. */}
+        <div ref={featureTrackRef} className="relative mt-10 h-px w-full bg-gray-200 sm:mt-14">
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute bottom-0 h-16 blur-2xl transition-opacity duration-500 ${
+              activeFeature ? 'opacity-70' : 'opacity-0'
+            }`}
+            style={{
+              left: indicator ? indicator.left : 0,
+              width: indicator ? indicator.width : 0,
+              background:
+                'radial-gradient(58% 92% at 50% 100%, rgba(228,180,235,0.55), rgba(196,181,253,0.45) 45%, rgba(191,219,254,0.35) 72%, transparent 100%)',
+            }}
+          />
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute -top-px h-[2px] bg-ink-900 ${
+              indicator ? 'transition-[left,width] duration-500 ease-out' : ''
+            }`}
+            style={{ left: indicator ? indicator.left : 0, width: indicator ? indicator.width : 0 }}
+          />
         </div>
       </section>
 
@@ -237,6 +307,7 @@ export default function Home() {
         <div className="mx-auto max-w-6xl">
           <SectionHeader
             eyebrow="Get started"
+            eyebrowClassName="!text-ink-900"
             title="Live in 3 minutes"
             text="No developers, no setup calls, no credit card. Three steps and your assistant is talking to customers."
           />
@@ -247,16 +318,19 @@ export default function Home() {
               ['3', 'Copy one line to your website', 'Paste a single script tag or share your QR link. Your assistant starts working immediately.'],
             ].map(([n, title, text]) => (
               <div key={n} className="card p-6 sm:p-7">
-                <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
+                <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-sm font-semibold text-white">
                   {n}
                 </div>
-                <h3 className="mb-2 text-[15px] font-semibold text-ink-900">{title}</h3>
+                <h3 className="mb-2 text-[16px] font-semibold text-ink-900">{title}</h3>
                 <p className="text-sm leading-relaxed text-ink-500">{text}</p>
               </div>
             ))}
           </div>
           <div className="mt-10 text-center">
-            <Link href="/signup" className="btn-primary px-7 py-3">
+            <Link
+              href="/signup"
+              className="btn-primary relative isolate overflow-hidden bg-transparent px-7 py-3 before:absolute before:inset-0 before:-z-10 before:bg-ink-900 after:absolute after:inset-0 after:-z-10 after:bg-gray-600 after:opacity-0 after:transition-opacity after:duration-300 after:ease-out hover:after:opacity-100 focus-visible:ring-ink-900"
+            >
               Start now — it&apos;s free
             </Link>
           </div>
@@ -267,6 +341,7 @@ export default function Home() {
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
         <SectionHeader
           eyebrow="Features"
+          eyebrowClassName="!text-ink-900"
           title="Your business, on autopilot"
           text="Chitra learns your business once and works 24/7 — answering questions, capturing leads, booking appointments."
         />
@@ -282,7 +357,10 @@ export default function Home() {
               questions instantly and accurately — 24/7, in any language your
               customers speak.
             </p>
-            <Link href="/signup" className="btn-primary w-fit px-5 py-2.5">
+            <Link
+              href="/signup"
+              className="btn-primary relative isolate w-fit overflow-hidden bg-transparent px-5 py-2.5 before:absolute before:inset-0 before:-z-10 before:bg-ink-900 after:absolute after:inset-0 after:-z-10 after:bg-gray-600 after:opacity-0 after:transition-opacity after:duration-300 after:ease-out hover:after:opacity-100 focus-visible:ring-ink-900"
+            >
               Try it free
             </Link>
           </div>
@@ -299,13 +377,13 @@ export default function Home() {
                 <div className="max-w-[85%] rounded-lg rounded-bl-sm bg-gray-100 px-3.5 py-2.5 text-[13px] text-ink-700">
                   Hi! Is the salon open this Sunday?
                 </div>
-                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-brand-600 px-3.5 py-2.5 text-[13px] text-white">
+                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-blue-500 px-3.5 py-2.5 text-[13px] text-white">
                   Yes! We&apos;re open 10am–6pm this Sunday. Would you like me to book you a slot?
                 </div>
                 <div className="max-w-[85%] rounded-lg rounded-bl-sm bg-gray-100 px-3.5 py-2.5 text-[13px] text-ink-700">
                   Yes, 2pm for a haircut please
                 </div>
-                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-brand-600 px-3.5 py-2.5 text-[13px] text-white">
+                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-blue-500 px-3.5 py-2.5 text-[13px] text-white">
                   Done! You&apos;re booked for Sunday at 2pm. See you then.
                 </div>
               </div>
