@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import DemoWidget from '../components/DemoWidget';
 
 /* Inline SVG icon set (Lucide-style strokes) */
@@ -87,30 +87,29 @@ export default function Home() {
       <section className="mx-auto max-w-6xl px-5 pb-16 pt-10 sm:px-6 sm:pt-14 lg:pt-20">
         {/* Hero headline — Suisse Intl Book stack (see fontFamily.suisse).
             font-normal = "Book"; Arial has no Book cut, so it renders Arial Regular. */}
-        <h1 className="h-display max-w-5xl pt-7 font-suisse text-4xl font-normal leading-[1.05] tracking-[-0.01em] sm:pt-6 sm:text-6xl lg:text-[80px]">
+        <h1 className="h-display max-w-5xl pt-7 pb-7 font-suisse text-4xl font-medium leading-[1.05] tracking-[-0.01em] sm:pt-6 sm:text-6xl lg:text-[80px]">
           Stop Losing Customers to Slow Replies.
         </h1>
 
         <Link
           href="/signup"
-          className="mt-12 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 sm:mt-14"
+          className="mt-8 mb-12 inline-flex items-center justify-center rounded-lg bg-ink-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 sm:mt-14"
         >
           Get Started
         </Link>
 
-        {/* Copy + gif — pushed down, and shifted right on wide screens so the left
-            side stays open. The negative right margin only applies at xl+, where the
-            6xl container leaves enough slack that nothing overflows the viewport. */}
+        
         <div className="mt-24 flex sm:mt-32 md:mt-40 md:justify-end">
           <div className="w-full md:w-[52%]">
-            <p className="text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
-              You know how customers expect instant answers, even when your team
-              is busy running the business?
+            <p className="text-justify text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
+            You know how customers expect instant answers, even when your team
+            is busy running the business?
             </p>
-            <p className="mt-3 text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
+
+            <p className="mt-3 text-justify text-[15px] leading-relaxed text-ink-900 sm:text-[17px]">
               We help businesses capture more customers with AI-powered support,
               lead generation, and automated bookings — while saving time.
-            </p>
+            </p>    
 
             {/* Gif container — drop your gif inside this div, e.g.
                 <img src="/hero.gif" alt="Chitra AI demo" className="h-full w-full object-cover" /> */}
