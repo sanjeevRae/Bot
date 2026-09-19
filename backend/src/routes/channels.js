@@ -117,19 +117,18 @@ async function runChatForChannel(orgId, sessionId, message, channel) {
   ]);
   if (!org) return 'Sorry, this business is unavailable.';
 
-  // Quota check
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
-  const { count: msgCount } = await supabaseAdmin
-    .from('usage_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('organization_id', orgId)
-    .eq('event_type', 'message')
-    .gte('created_at', monthStart.toISOString());
+  // Quota check — free (and expired) plans have a one-time lifetime allowance,
+  // paid plans a monthly one. Note this reads the per-org override from
+  // `organizations` (where it lives), not `settings`.
+  const { messageUsageFor, quotaExceededMessage } = require('../services/quotas');
+  const { data: orgPlan } = await supabaseAdmin
+    .from('organizations')
+    .select('monthly_message_quota, plan, plan_expires_at')
+    .eq('id', orgId)
+    .single();
 
-  const quota = settings?.monthly_message_quota ?? config.freeTierQuotas.messagesPerMonth;
-  if (msgCount >= quota) return 'This business has reached its monthly message limit. Please try again later.';
+  const quota = await messageUsageFor({ id: orgId, ...(orgPlan || {}) });
+  if (quota.exceeded) return quotaExceededMessage(quota.period);
 
   const contextChunks = await retrieveContext(orgId, message);
 

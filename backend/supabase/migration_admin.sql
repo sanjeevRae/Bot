@@ -7,8 +7,9 @@
 alter table public.profiles
   add column if not exists role text not null default 'owner';
 
--- Per-org custom monthly message quota.
--- NULL = use the platform free-tier default (QUOTA_MESSAGES_PER_MONTH).
+-- Per-org custom message allowance.
+-- NULL = use the platform free allowance (QUOTA_MESSAGES_TOTAL), which is a
+-- one-time (lifetime) allowance for free orgs and a monthly one for paid orgs.
 -- Admins set this to extend AI usage for specific clients.
 alter table public.organizations
   add column if not exists monthly_message_quota int;

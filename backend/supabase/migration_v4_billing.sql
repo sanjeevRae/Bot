@@ -37,6 +37,6 @@ alter table public.settings
   add column if not exists custom_logo_url text;
 
 -- ---------- Plan quotas reference ----------
--- free:   200 msgs/mo, 10 docs, 50 bookings (existing defaults)
+-- free:   100 msgs ONE-TIME (lifetime, never resets), 10 docs, 50 bookings/mo
 -- pro:    2000 msgs/mo, 100 docs, unlimited bookings, white-label
 -- agency: 10000 msgs/mo, 500 docs, + multi-client management (future)

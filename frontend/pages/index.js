@@ -1,6 +1,7 @@
 ﻿import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import DemoWidget from '../components/DemoWidget';
+import { PLANS, planPrice, ANNUAL_DISCOUNT } from '../lib/plans';
 
 /* Feature glyphs — the exact artwork supplied for this section: leaf, sparkle,
    lightning, star. Each viewBox is tight to its own path, so only the ink height
@@ -41,18 +42,22 @@ const FEATURES = [
   { icon: FeatureIcons.star, title: 'Installs anywhere', text: 'One script tag for any website, WordPress plugin, or QR code link.' },
 ];
 
-/* Reusable section header */
-function SectionHeader({ eyebrow, title, text, dark = false, eyebrowClassName = '' }) {
+/* Reusable section header. Centred by default; pass align="left" for a left-aligned block. */
+function SectionHeader({ eyebrow, title, text, dark = false, eyebrowClassName = '', align = 'center' }) {
+  // An explicit colour wins over the dark-section default, so the two never fight
+  // over CSS order (both are !important utilities).
+  const eyebrowColor = eyebrowClassName || (dark ? '!text-brand-300' : '');
+  const left = align === 'left';
   return (
-    <div className="mx-auto mb-12 max-w-2xl text-center sm:mb-16">
+    <div className={`mb-12 max-w-2xl sm:mb-16 ${left ? '' : 'mx-auto text-center'}`}>
       {eyebrow && (
-        <p className={`eyebrow mb-3 ${dark ? '!text-brand-300' : ''} ${eyebrowClassName}`}>{eyebrow}</p>
+        <p className={`eyebrow mb-3 ${eyebrowColor}`}>{eyebrow}</p>
       )}
       <h2 className={`h-display mb-4 text-3xl leading-tight sm:text-4xl ${dark ? 'text-white' : ''}`}>
         {title}
       </h2>
       {text && (
-        <p className={`mx-auto max-w-lg text-[15px] leading-relaxed ${dark ? 'text-gray-400' : 'text-ink-500'}`}>
+        <p className={`max-w-lg text-[15px] leading-relaxed ${left ? '' : 'mx-auto'} ${dark ? 'text-gray-400' : 'text-ink-500'}`}>
           {text}
         </p>
       )}
@@ -67,6 +72,8 @@ export default function Home() {
   // Which feature card is hovered — drives its icon's spin-and-lift and the
   // indicator line under the grid.
   const [activeFeature, setActiveFeature] = useState(null);
+  // Billing cycle for the pricing section: monthly (default) or yearly.
+  const [annual, setAnnual] = useState(false);
   // Measured x/width of each feature column, so the indicator can slide between them.
   const featureGridRef = useRef(null);
   const featureTrackRef = useRef(null);
@@ -303,13 +310,12 @@ export default function Home() {
       </section>
 
       {/* How it works */}
-      <section id="how" className="border-y border-gray-200 bg-gray-50 px-5 py-16 sm:px-6 sm:py-24">
+      <section id="how" className="border-y border-gray-200 bg-white px-5 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-6xl">
           <SectionHeader
             eyebrow="Get started"
             eyebrowClassName="!text-ink-900"
             title="Live in 3 minutes"
-            text="No developers, no setup calls, no credit card. Three steps and your assistant is talking to customers."
           />
           <div className="grid gap-4 md:grid-cols-3 md:gap-6">
             {[
@@ -377,13 +383,13 @@ export default function Home() {
                 <div className="max-w-[85%] rounded-lg rounded-bl-sm bg-gray-100 px-3.5 py-2.5 text-[13px] text-ink-700">
                   Hi! Is the salon open this Sunday?
                 </div>
-                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-blue-500 px-3.5 py-2.5 text-[13px] text-white">
+                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-black px-3.5 py-2.5 text-[13px] text-white">
                   Yes! We&apos;re open 10am–6pm this Sunday. Would you like me to book you a slot?
                 </div>
                 <div className="max-w-[85%] rounded-lg rounded-bl-sm bg-gray-100 px-3.5 py-2.5 text-[13px] text-ink-700">
                   Yes, 2pm for a haircut please
                 </div>
-                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-blue-500 px-3.5 py-2.5 text-[13px] text-white">
+                <div className="ml-auto max-w-[85%] rounded-lg rounded-br-sm bg-black px-3.5 py-2.5 text-[13px] text-white">
                   Done! You&apos;re booked for Sunday at 2pm. See you then.
                 </div>
               </div>
@@ -477,6 +483,7 @@ export default function Home() {
           <SectionHeader
             dark
             eyebrow="Integrations"
+            eyebrowClassName="!text-white"
             title="Don't replace. Integrate."
             text="Chitra fits into the tools you already use — no migration, no learning curve. Connect in one click."
           />
@@ -504,7 +511,7 @@ export default function Home() {
             ))}
           </div>
           <div className="mt-10 text-center">
-            <Link href="/signup" className="btn-link !text-brand-300 hover:!text-white">
+            <Link href="/signup" className="btn-link !text-white hover:!text-white">
               All integrations <span aria-hidden>→</span>
             </Link>
           </div>
@@ -526,27 +533,126 @@ export default function Home() {
         <p className="text-xs text-ink-400">Owner, Bloom Salon &amp; Spa</p>
       </section>
 
-      {/* CTA banner */}
-      <section className="border-t border-gray-200 bg-gray-50 px-5 py-16 sm:px-6 sm:py-20">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-          <div>
-            <h2 className="h-display mb-2 max-w-md text-3xl leading-tight sm:text-4xl">
-              Discover the full scale of Chitra capabilities
-            </h2>
-            <p className="max-w-md text-[15px] text-ink-500">
-              Set up in minutes. Free to start. Scale when you grow.
-            </p>
+      {/* Pricing */}
+      <section id="pricing" className="bg-gray-50 px-5 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeader
+            eyebrow="Pricing"
+            eyebrowClassName="!text-ink-900"
+            align="left"
+            title="Choose your package."
+          />
+
+          {/* Billing-cycle toggle — a black/white take on the reference pill. */}
+          <div className="mb-8 flex flex-wrap items-center gap-4">
+            <span className="text-[15px] text-ink-500">
+              Annually (save {Math.round(ANNUAL_DISCOUNT * 100)}%)
+            </span>
+            <div
+              role="group"
+              aria-label="Billing cycle"
+              className="relative grid grid-cols-2 rounded-full border border-gray-200 bg-white p-1"
+            >
+              {/* Sliding black pill. Container padding is 4px, so one segment is
+                  calc(50% - 4px) wide — translating by 100% lands it on the next one. */}
+              <span
+                aria-hidden="true"
+                className={`absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-ink-900 transition-transform duration-300 ease-out ${
+                  annual ? 'translate-x-full' : ''
+                }`}
+              />
+              {[
+                ['Monthly', false],
+                ['Annually', true],
+              ].map(([label, value]) => (
+                <button
+                  key={label}
+                  type="button"
+                  aria-pressed={annual === value}
+                  onClick={() => setAnnual(value)}
+                  className={`relative z-10 rounded-full px-6 py-1.5 text-[15px] font-medium transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 ${
+                    annual === value ? 'text-white' : 'text-ink-500 hover:text-ink-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-            <Link href="/login" className="btn-secondary px-6 py-3">
-              Get a Demo
-            </Link>
-            <Link href="/signup" className="btn-primary px-6 py-3">
-              Start for Free
-            </Link>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            {PLANS.map((p) => {
+              // The top tier is inverted, the way the reference sets its enterprise card apart.
+              const dark = p.id === 'agency';
+              const { price, per, period } = planPrice(p, annual);
+              return (
+                <div
+                  key={p.id}
+                  className={`flex flex-col rounded-2xl border p-8 ${
+                    dark ? 'border-transparent bg-ink-900' : 'border-gray-200 bg-white'
+                  }`}
+                >
+                  <p
+                    className={`text-[13px] font-medium uppercase tracking-[0.12em] ${
+                      dark ? 'text-gray-400' : 'text-ink-400'
+                    }`}
+                  >
+                    {p.name}
+                  </p>
+
+                  <p className={`mt-8 text-[40px] font-bold leading-none tracking-[-0.02em] ${dark ? 'text-white' : 'text-ink-900'}`}>
+                    {price}
+                    {per && (
+                      <span className={`ml-1 text-[15px] font-normal ${dark ? 'text-gray-400' : 'text-ink-400'}`}>{per}</span>
+                    )}
+                  </p>
+                  <p className={`mt-4 text-[16px] ${dark ? 'text-gray-300' : 'text-ink-700'}`}>{period}</p>
+
+                  <Link
+                    href="/signup"
+                    className={`mt-8 inline-flex w-full items-center justify-center rounded-lg border px-5 py-3 text-[15px] font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                      dark
+                        ? 'border-white/30 text-white hover:bg-white/10 focus-visible:ring-white'
+                        : 'border-gray-300 text-ink-700 hover:border-gray-400 hover:bg-gray-50 focus-visible:ring-ink-900'
+                    }`}
+                  >
+                    {p.id === 'free' ? 'Start free' : `Choose ${p.name}`}
+                  </Link>
+
+                  <ul className={`mt-8 space-y-1.5 text-[18px] leading-[1.5] ${dark ? 'text-gray-200' : 'text-ink-700'}`}>
+                    {p.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2.5">
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                          className={`mt-1 shrink-0 ${dark ? 'text-gray-400' : 'text-ink-400'}`}
+                        >
+                          <path d="M20 6 9 17l-5-5" />
+                        </svg>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Description sits at the foot of the card, like the reference. */}
+                  <p className={`mt-auto pt-8 text-[15px] leading-[1.6] ${dark ? 'text-gray-400' : 'text-ink-500'}`}>
+                    {p.description}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
+
+      
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white px-5 pb-8 pt-14 sm:px-6">

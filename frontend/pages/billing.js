@@ -1,24 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, supabase } from '../lib/supabaseClient';
-
-const PLANS = [
-  {
-    id: 'free', name: 'Free', price: 'Rs. 0', tagline: 'Try Chitra with no commitment',
-    features: ['200 messages / month', '10 knowledge documents', '50 bookings / month', 'Website widget + QR link'],
-  },
-  {
-    id: 'pro', name: 'Pro', price: 'Rs. 1,500', per: '/mo', tagline: 'For growing businesses',
-    highlight: true,
-    features: ['2,000 messages / month', '100 knowledge documents', 'Unlimited bookings', 'White-label (remove Chitra branding)', 'Email notifications'],
-  },
-  {
-    id: 'agency', name: 'Agency', price: 'Rs. 4,500', per: '/mo', tagline: 'Manage clients at scale',
-    features: ['10,000 messages / month', '500 knowledge documents', 'Everything in Pro', 'Priority support', 'Multi-client management*'],
-  },
-];
-
-const PAID_PLANS = PLANS.filter((p) => p.id !== 'free');
-const planLabel = (id) => (PLANS.find((p) => p.id === id) || {}).name || id;
+import { PLANS, PAID_PLANS, planLabel } from '../lib/plans';
 
 export default function Billing() {
   const [me, setMe] = useState(null);

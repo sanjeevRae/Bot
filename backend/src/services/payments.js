@@ -17,7 +17,9 @@ const PLANS = {
 };
 
 const PLAN_QUOTAS = {
-  free: { messagesPerMonth: 200, documentsMax: 10, bookingsPerMonth: 50 },
+  // Free tier messages are a ONE-TIME (lifetime) allowance, not monthly — they
+  // never reset. See services/quotas.js. Paid plans reset monthly.
+  free: { messagesTotal: 100, documentsMax: 10, bookingsPerMonth: 50, oneTime: true },
   pro: { messagesPerMonth: 2000, documentsMax: 100, bookingsPerMonth: 100000 },
   agency: { messagesPerMonth: 10000, documentsMax: 500, bookingsPerMonth: 1000000 },
 };

@@ -149,8 +149,16 @@ export default function Dashboard() {
 
   const { org, usage } = data;
 
+  // The free tier's allowance is one-time (lifetime), not monthly — so label it
+  // against the all-time count rather than this month's, which never resets it.
+  const freeAllowance = usage.messageQuotaPeriod === 'lifetime';
+  const messagesUsed = freeAllowance ? usage.messagesTotal ?? usage.messagesThisMonth : usage.messagesThisMonth;
+
   const stats = [
-    { label: 'Messages this month', value: `${usage.messagesThisMonth} / ${usage.messageQuota ?? 100}` },
+    {
+      label: freeAllowance ? 'Messages used (one-time)' : 'Messages this month',
+      value: `${messagesUsed} / ${usage.messageQuota ?? 100}`,
+    },
     { label: 'Bookings this month', value: usage.bookingsThisMonth },
     { label: 'Total leads', value: usage.totalLeads },
     { label: 'Knowledge docs', value: usage.documents },
