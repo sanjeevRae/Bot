@@ -47,7 +47,7 @@ router.get('/widget.js', async (req, res) => {
     .eq('organization_id', orgId)
     .maybeSingle();
 
-  const brandColor = /^#[0-9a-fA-F]{6}$/.test(settings?.brand_color || '') ? settings.brand_color : '#059669';
+  const brandColor = /^#[0-9a-fA-F]{6}$/.test(settings?.brand_color || '') ? settings.brand_color : '#111827';
   const botName = (settings?.bot_name || 'Chitra').trim().replace(/['"\\]/g, '').trim();
   const welcome = (settings?.welcome_message || 'Hi! How can I help you today?').trim().replace(/['"\\]/g, '').trim();
   const showBranding = !settings?.white_label;
@@ -331,7 +331,7 @@ router.get(['/bot/:orgId', '/'], async (req, res) => {
     .eq('organization_id', orgId)
     .maybeSingle();
 
-  const brandColor = /^#[0-9a-fA-F]{6}$/.test(botSettings?.brand_color || '') ? botSettings.brand_color : '#059669';
+  const brandColor = /^#[0-9a-fA-F]{6}$/.test(botSettings?.brand_color || '') ? botSettings.brand_color : '#111827';
   const welcome = (botSettings?.welcome_message || 'Hi! How can I help you today?').trim();
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;

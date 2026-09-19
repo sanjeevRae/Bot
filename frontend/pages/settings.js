@@ -76,10 +76,10 @@ export default function Settings() {
             <div>
               <label className="mb-1.5 block text-[13px] font-medium text-ink-700">Brand color</label>
               <div className="flex items-center gap-3">
-                <input type="color" value={settings.brand_color || '#059669'}
+                <input type="color" value={settings.brand_color || '#111827'}
                   onChange={(e) => setSettings({ ...settings, brand_color: e.target.value })}
                   className="h-9 w-14 cursor-pointer rounded-lg border border-gray-300 bg-white p-1" />
-                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#059669'}</span>
+                <span className="font-mono text-xs text-ink-500">{settings.brand_color || '#111827'}</span>
               </div>
             </div>
           </div>

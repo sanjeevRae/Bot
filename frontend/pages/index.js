@@ -518,21 +518,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Testimonial */}
-      <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-6 sm:py-24">
-        <blockquote className="h-display mx-auto mb-8 max-w-2xl text-2xl leading-snug sm:text-3xl">
-          Chitra answers our customers while we sleep. It booked 40+ appointments
-          in the first month alone — and we didn&apos;t hire anyone.
-        </blockquote>
-        <img
-          src="https://i.pravatar.cc/96?img=32"
-          alt="Anjali Mehta"
-          className="mx-auto mb-3 h-12 w-12 rounded-full object-cover ring-2 ring-gray-200"
-        />
-        <p className="text-sm font-semibold text-ink-900">Anjali Mehta</p>
-        <p className="text-xs text-ink-400">Owner, Bloom Salon &amp; Spa</p>
-      </section>
-
       {/* Pricing */}
       <section id="pricing" className="bg-gray-50 px-5 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-6xl">
@@ -652,7 +637,20 @@ export default function Home() {
         </div>
       </section>
 
-      
+      {/* Testimonial */}
+      <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-6 sm:py-24">
+        <blockquote className="h-display mx-auto mb-8 max-w-2xl text-2xl leading-snug sm:text-3xl">
+          Chitra answers our customers while we sleep. It booked 40+ appointments
+          in the first month alone — and we didn&apos;t hire anyone.
+        </blockquote>
+        <img
+          src="https://i.pravatar.cc/96?img=32"
+          alt="Anjali Mehta"
+          className="mx-auto mb-3 h-12 w-12 rounded-full object-cover ring-2 ring-gray-200"
+        />
+        <p className="text-sm font-semibold text-ink-900">Anjali Mehta</p>
+        <p className="text-xs text-ink-400">Owner, Bloom Salon &amp; Spa</p>
+      </section>
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white px-5 pb-8 pt-14 sm:px-6">

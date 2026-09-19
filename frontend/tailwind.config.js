@@ -4,10 +4,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // "Brand" is the site's action colour. It is now the black theme: the
+        // primary steps sit on ink-900 (#111827) with a darker hover, and the
+        // lighter steps are neutral greys for chips, rings and subtle tints.
         brand: {
-          50: '#ecfdf5', 100: '#d1fae5', 200: '#a7f3d0', 300: '#6ee7b7',
-          400: '#34d399', 500: '#10b981', 600: '#059669', 700: '#047857',
-          800: '#065f46', 900: '#064e3b',
+          50: '#f6f6f7', 100: '#e7e7e9', 200: '#d3d3d6', 300: '#adadb3',
+          400: '#74747c', 500: '#3d3d44', 600: '#111827', 700: '#0a0e18',
+          800: '#060810', 900: '#03040a',
         },
         ink: {
           900: '#111827',

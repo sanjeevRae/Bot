@@ -110,7 +110,7 @@ export default function App({ Component, pageProps }) {
               <Link href="/login" className="rounded-lg px-3 py-1.5 text-ink-500 transition-colors hover:bg-gray-900/[0.04] hover:text-ink-900">
                 Log in
               </Link>
-              <Link href="/signup" className="btn-primary ml-2 !px-4 !py-1.5">
+              <Link href="/signup" className="ml-2 inline-flex items-center rounded-lg border border-gray-300 bg-white !px-4 !py-1.5 text-sm font-medium text-ink-900 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50">
                 Get started free
               </Link>
             </>

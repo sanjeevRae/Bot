@@ -239,7 +239,7 @@ async function inviteClientUser(email, clientOrg) {
       'Your AI assistant workspace is ready',
       `<p>You have been invited to manage <strong>${clientOrg.name}</strong>'s AI assistant.</p>
        <p style="margin:20px 0">
-         <a href="${actionLink}" style="background:#059669;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open my dashboard</a>
+         <a href="${actionLink}" style="background:#111827;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600">Open my dashboard</a>
        </p>
        <p style="font-size:12px;color:#6b7280">Or paste this link into your browser:<br>${actionLink}</p>`
     )

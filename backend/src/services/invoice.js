@@ -144,7 +144,7 @@ function detail(label, value, opts = {}) {
 function renderHeader(company, inv) {
   const logo = has(company.logoUrl)
     ? '<img src="' + esc(company.logoUrl) + '" alt="" width="64" height="64" style="width:64px;height:64px;object-fit:contain;border-radius:8px;display:block" />'
-    : '<div style="width:64px;height:64px;border-radius:8px;background:#059669;color:#fff;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center">C</div>';
+    : '<div style="width:64px;height:64px;border-radius:8px;background:#111827;color:#fff;font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center">C</div>';
 
   const companyLines = [
     has(company.address) ? nl2br(company.address) : '',
@@ -380,7 +380,7 @@ async function buildInvoicePdf(inv) {
   if (images.logo) {
     doc.image(images.logo, L, top, { fit: [52, 52] });
   } else {
-    doc.roundedRect(L, top, 52, 52, 8).fill('#059669');
+    doc.roundedRect(L, top, 52, 52, 8).fill('#111827');
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(24).text('C', L, top + 13, { width: 52, align: 'center' });
   }
   const cx = L + 66;
@@ -615,7 +615,7 @@ function renderInvoiceCoverLetter(inv, company) {
   const brand = company.name || 'Chitra Tech';
   const logo = has(company.logoUrl)
     ? '<img src="' + esc(company.logoUrl) + '" alt="" width="32" height="32" style="border-radius:8px;display:block;object-fit:contain" />'
-    : '<span style="background:#059669;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>';
+    : '<span style="background:#111827;color:#fff;width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-weight:700">C</span>';
   return '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">'
     + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">' + logo + '<strong style="font-size:15px;color:#111827">' + esc(brand) + '</strong></div>'
     + '<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151">Dear ' + esc(name) + ',</p>'
