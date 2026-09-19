@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
+const { messageQuotaFor } = require('../services/quotas');
 
 const router = express.Router();
 
@@ -26,11 +27,15 @@ router.get('/me', requireAuth, async (req, res) => {
   const monthIso = monthStart.toISOString();
 
   // One round-trip wave instead of 6 sequential ones
-  const [orgRes, settingsRes, msgRes, bookRes, leadRes, docRes] = await Promise.all([
+  const [orgRes, settingsRes, msgRes, msgTotalRes, bookRes, leadRes, docRes] = await Promise.all([
     supabaseAdmin.from('organizations').select('*').eq('id', req.orgId).single(),
     supabaseAdmin.from('settings').select('*').eq('organization_id', req.orgId).maybeSingle(),
     supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
       .eq('organization_id', req.orgId).eq('event_type', 'message').gte('created_at', monthIso),
+    // All-time message count — the free tier is measured against this, because
+    // its allowance is one-time (lifetime) and never resets.
+    supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
+      .eq('organization_id', req.orgId).eq('event_type', 'message'),
     supabaseAdmin.from('usage_events').select('id', { count: 'exact', head: true })
       .eq('organization_id', req.orgId).eq('event_type', 'booking').gte('created_at', monthIso),
     supabaseAdmin.from('leads').select('id', { count: 'exact', head: true })
@@ -41,14 +46,17 @@ router.get('/me', requireAuth, async (req, res) => {
 
   if (orgRes.error) return res.status(500).json({ error: orgRes.error.message });
 
-  const config = require('../config');
+  // Free/expired plans: one-time allowance. Paid plans: monthly allowance.
+  const quota = messageQuotaFor(orgRes.data);
   const payload = {
     org: orgRes.data,
     settings: settingsRes.data,
     role: req.role,
     usage: {
       messagesThisMonth: msgRes.count || 0,
-      messageQuota: orgRes.data?.monthly_message_quota ?? config.freeTierQuotas.messagesPerMonth,
+      messagesTotal: msgTotalRes.count || 0, // all-time; what the free allowance is spent from
+      messageQuota: quota.limit,
+      messageQuotaPeriod: quota.period, // 'month' | 'lifetime'
       bookingsThisMonth: bookRes.count || 0,
       totalLeads: leadRes.count || 0,
       documents: docRes.count || 0,

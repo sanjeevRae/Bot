@@ -3,8 +3,8 @@ const supabaseAdmin = require('../lib/supabase');
 const { retrieveContext, trackUsage } = require('../services/rag');
 const { buildSystemPrompt, getToolSchemas, runChatTurn } = require('../services/groq');
 const { createToolExecutor } = require('../services/tools');
+const { messageUsageFor, quotaExceededMessage } = require('../services/quotas');
 const { issueSession, verifySession } = require('../lib/sessionToken');
-const config = require('../config');
 
 const router = express.Router();
 
@@ -74,41 +74,23 @@ router.post('/', async (req, res) => {
       .eq('organization_id', orgId)
       .maybeSingle();
 
-    // ---- Free-tier quota check (messages/month) ----
-    // Plan quota (free/pro/agency) takes priority; falls back to platform default.
-    const monthStart = new Date();
-    monthStart.setDate(1);
-    monthStart.setHours(0, 0, 0, 0);
-    const { count: msgCount } = await supabaseAdmin
-      .from('usage_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('event_type', 'message')
-      .gte('created_at', monthStart.toISOString());
-
+    // ---- Free-tier quota check ----
+    // Free (and expired) plans get a one-time lifetime allowance; paid plans get
+    // a monthly one. See services/quotas.js for how each period is counted.
     const { data: orgPlan } = await supabaseAdmin
       .from('organizations')
       .select('monthly_message_quota, plan, plan_expires_at')
       .eq('id', orgId)
       .single();
 
-    // Paid plan expired? Downgrade to free quotas.
-    const planActive = orgPlan?.plan && orgPlan.plan !== 'free'
-      && (!orgPlan.plan_expires_at || new Date(orgPlan.plan_expires_at) > new Date());
+    const quota = await messageUsageFor({ id: orgId, ...(orgPlan || {}) });
 
-    let messageQuota;
-    if (planActive) {
-      messageQuota = orgPlan.monthly_message_quota
-        ?? require('../services/payments').PLAN_QUOTAS[orgPlan.plan].messagesPerMonth;
-    } else {
-      messageQuota = orgPlan?.monthly_message_quota ?? config.freeTierQuotas.messagesPerMonth;
-    }
-
-    if (msgCount >= messageQuota) {
+    if (quota.exceeded) {
       return res.status(429).json({
-        error: 'This business has reached its monthly message limit. Please try again later.',
+        error: quotaExceededMessage(quota.period),
         quota_exceeded: true,
-        limit: messageQuota,
+        limit: quota.limit,
+        period: quota.period,
       });
     }
 

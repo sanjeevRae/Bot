@@ -127,7 +127,14 @@ const config = {
     .filter(Boolean),
 
   freeTierQuotas: {
-    messagesPerMonth: parseInt(process.env.QUOTA_MESSAGES_PER_MONTH || '200', 10),
+    // Free-tier messages are a ONE-TIME allowance, never a monthly one: a free
+    // org gets this many messages in total and must upgrade after that. It does
+    // not reset (see services/quotas.js).
+    // QUOTA_MESSAGES_PER_MONTH is the legacy name — still honoured if set.
+    messagesTotal: parseInt(
+      process.env.QUOTA_MESSAGES_TOTAL || process.env.QUOTA_MESSAGES_PER_MONTH || '100',
+      10
+    ),
     documentsMax: parseInt(process.env.QUOTA_DOCUMENTS_MAX || '10', 10),
     bookingsPerMonth: parseInt(process.env.QUOTA_BOOKINGS_PER_MONTH || '50', 10),
   },
