@@ -115,8 +115,15 @@ export default function Knowledge() {
         <div className="mb-6 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
       )}
 
+      <div className="mb-4 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-ink-900">Add knowledge</h2>
+          <p className="mt-1 text-xs text-ink-500">Start with the fastest source, then add files or integrations when needed.</p>
+        </div>
+      </div>
+
       {/* Add sources */}
-      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mb-10 grid gap-4 lg:grid-cols-3">
         {/* Crawl */}
         <form onSubmit={crawl} className="flex min-h-[238px] flex-col rounded-md bg-[#eef7ff] p-5">
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white/70"><GlobeIcon /></div>
@@ -154,7 +161,15 @@ export default function Knowledge() {
         </form>
 
         {/* Google Drive */}
-        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
+      </div>
+
+      <div className="mb-10">
+        <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
+          <h2 className="text-sm font-semibold text-ink-900">Connected sources</h2>
+          <span className="text-xs text-ink-400">Optional imports</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="flex min-h-[188px] flex-col rounded-md border border-gray-200 bg-white p-5">
           <input type="hidden" name="kind" defaultValue="drive" />
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><DriveIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Google Drive</h3>
@@ -166,7 +181,7 @@ export default function Knowledge() {
         </form>
 
         {/* Notion */}
-        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
+        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="flex min-h-[188px] flex-col rounded-md border border-gray-200 bg-white p-5">
           <input type="hidden" name="kind" defaultValue="notion" />
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><NotionIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Notion</h3>
@@ -176,11 +191,15 @@ export default function Knowledge() {
             <button disabled={busy} className="btn-primary w-full !py-2 text-xs">Import &amp; learn</button>
           </div>
         </form>
+        </div>
       </div>
 
       {/* Document list */}
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">Your documents</h2>
+      <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-ink-900">Manage documents</h2>
+          <p className="mt-1 text-xs text-ink-500">Review what the assistant can use when answering customers.</p>
+        </div>
       </div>
       {docs.length === 0 ? (
         <div className="card p-12 text-center">

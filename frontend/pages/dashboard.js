@@ -179,20 +179,29 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Stats */}
-      <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-md bg-gray-50 p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-ink-400">{s.label}</div>
-            <div className="mt-3 text-[27px] font-semibold tracking-tight text-ink-900">{s.value}</div>
+      <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+        <div className="space-y-6">
+          <div className="rounded-md bg-gray-50 p-5 sm:p-6">
+            <div className="mb-5 flex items-center justify-between border-b border-gray-200 pb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-ink-900">Workspace summary</h2>
+                <p className="mt-1 text-xs text-ink-500">A quick view of current usage and activity.</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-7">
+              {stats.map((s) => (
+                <div key={s.label}>
+                  <div className="text-[26px] font-semibold tracking-tight text-ink-900">{s.value}</div>
+                  <div className="mt-1 text-xs leading-4 text-ink-500">{s.label}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+          <InstallSection orgId={org.id} />
+        </div>
 
-      <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr]">
         <TestChat orgId={org.id} />
-        <InstallSection orgId={org.id} />
-      </div>
+      </section>
     </main>
   );
 }
