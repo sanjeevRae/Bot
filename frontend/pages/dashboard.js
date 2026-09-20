@@ -243,7 +243,7 @@ export default function Dashboard() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900"></h2>
         <div className="action-grid">
           {[
             { icon: 'AI', title: 'Test assistant', body: 'Preview how your bot answers before customers see it.' },
