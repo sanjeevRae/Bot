@@ -237,45 +237,74 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
+      <section className="grid scroll-mt-24 gap-6 lg:grid-cols-[1fr_380px]" id="test-chat">
         <TestChat orgId={org.id} />
         <InstallSection orgId={org.id} />
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900"></h2>
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
         <div className="action-grid">
           {[
-            { icon: 'AI', title: 'Test assistant', body: 'Preview how your bot answers before customers see it.' },
-            { icon: 'KB', title: 'Train knowledge', body: `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.` },
-            // The widget/link cards copy their value on click — same values as
-            // the Install panel below, one click less to get them.
-            { icon: 'JS', title: 'Install widget', body: 'Add the assistant to your website with one script.', copy: widgetSnippet, copyName: 'embed snippet' },
-            { icon: '↗', title: 'Share chat link', body: 'Use the direct link in QR codes, bios, and campaigns.', copy: chatLink, copyName: 'chat link' },
+            { icon: 'AI', title: 'Test assistant', body: 'Preview how your bot answers before customers see it.', cta: 'Test assistance', action: 'scroll-test' },
+            { icon: 'KB', title: 'Train knowledge', body: `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`, cta: 'Train knowledge', action: 'open-knowledge' },
+            { icon: 'JS', title: 'Install widget', body: 'Add the assistant to your website with one script.', cta: 'Click to copy the embed code', copy: widgetSnippet, copyName: 'embed snippet' },
+            { icon: '↗', title: 'Share chat link', body: 'Use the direct link in QR codes, bios, and campaigns.', cta: 'Click to copy the link', copy: chatLink, copyName: 'chat link' },
           ].map((item) => {
             const copied = copiedCard === item.title;
             const content = (
               <>
-                <div className="action-icon">{copied ? '✓' : item.icon}</div>
-                <h3 className="text-base font-semibold text-ink-900">{item.title}</h3>
+                <div className={copied
+                  ? 'action-icon border-white/25 bg-white/10 text-white'
+                  : 'action-icon group-hover:border-white/25 group-hover:bg-white/10 group-hover:text-white group-focus-visible:border-white/25 group-focus-visible:bg-white/10 group-focus-visible:text-white'
+                }>{copied ? '✓' : item.icon}</div>
+                <h3 className={copied
+                  ? 'text-base font-semibold text-white'
+                  : 'text-base font-semibold text-ink-900 group-hover:text-white group-focus-visible:text-white'
+                }>{item.title}</h3>
                 {copied ? (
-                  <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-ink-900">
+                  <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-white">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
                     Copied to clipboard
                   </p>
                 ) : (
-                  <p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p>
+                  <p className="mt-2 text-sm leading-6 text-ink-500 group-hover:text-white/80 group-focus-visible:text-white/80">
+                    <span className="group-hover:hidden group-focus-visible:hidden">{item.body}</span>
+                    <span className="hidden font-medium text-white group-hover:inline group-focus-visible:inline">{item.cta} →</span>
+                  </p>
                 )}
               </>
             );
 
-            if (!item.copy) {
+            const cardClass = `action-card action-card-hoverable group${copied ? ' action-card-copied' : ''}`;
+
+            if (item.copy) {
               return (
-                <div key={item.title} className="action-card">
+                <button
+                  key={item.title}
+                  type="button"
+                  aria-label={`Copy ${item.copyName} to clipboard`}
+                  onClick={() => copyAction(item)}
+                  className={cardClass}
+                >
                   {content}
-                </div>
+                </button>
+              );
+            }
+
+            if (item.action === 'scroll-test') {
+              return (
+                <button
+                  key={item.title}
+                  type="button"
+                  aria-label="Scroll to the test chat preview"
+                  onClick={() => document.getElementById('test-chat')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className={cardClass}
+                >
+                  {content}
+                </button>
               );
             }
 
@@ -283,9 +312,9 @@ export default function Dashboard() {
               <button
                 key={item.title}
                 type="button"
-                aria-label={`Copy ${item.copyName} to clipboard`}
-                onClick={() => copyAction(item)}
-                className={`action-card action-card-clickable ${copied ? 'action-card-copied' : ''}`}
+                aria-label="Open the knowledge base"
+                onClick={() => router.push('/knowledge')}
+                className={cardClass}
               >
                 {content}
               </button>
@@ -350,7 +379,8 @@ function TestChat({ orgId }) {
     setBusy(false);
     setTimeout(() => boxRef.current?.scrollTo(0, boxRef.current.scrollHeight), 50);
   }
-
+  
+  // Test chat assistance
   return (
     <div className="flex h-[500px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white">
       <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-4">
