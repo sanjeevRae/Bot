@@ -179,24 +179,6 @@ export default function Dashboard() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
-        <div className="action-grid">
-          {[
-            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
-            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
-            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
-            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
-          ].map(([icon, title, body]) => (
-            <div key={title} className="action-card">
-              <div className="action-icon">{icon}</div>
-              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-10">
         <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Workspace performance</h2>
         <div className="data-panel">
           <div className="data-head grid-cols-[1.5fr_1fr_1fr]">
@@ -333,8 +315,8 @@ function InstallSection({ orgId }) {
     <div className="space-y-6 rounded-md border border-gray-200 bg-white p-6">
       <div>
         <p className="eyebrow mb-2">Distribution</p>
-        <h2 className="h-display text-xl">Install on your site</h2>
-        <p className="mt-1 text-sm leading-6 text-ink-500">Use the embed for websites or share the direct chat link across social profiles, QR codes, and campaigns.</p>
+        <h2 className="h-display text-xl">Add to your site</h2>
+        <p className="mt-1 text-sm leading-6 text-ink-500">Embed Chitra on your site or share your chat link with customers.</p>
       </div>
 
       <div>
@@ -363,3 +345,21 @@ function InstallSection({ orgId }) {
     </div>
   );
 }
+
+<section className="mb-10">
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
+        <div className="action-grid">
+          {[
+            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
+            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
+            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
+            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
+          ].map(([icon, title, body]) => (
+            <div key={title} className="action-card">
+              <div className="action-icon">{icon}</div>
+              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
