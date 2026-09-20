@@ -202,6 +202,24 @@ export default function Dashboard() {
         <TestChat orgId={org.id} />
         <InstallSection orgId={org.id} />
       </section>
+
+      <section className="mb-10">
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
+        <div className="action-grid">
+          {[
+            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
+            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
+            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
+            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
+          ].map(([icon, title, body]) => (
+            <div key={title} className="action-card">
+              <div className="action-icon">{icon}</div>
+              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
@@ -345,21 +363,3 @@ function InstallSection({ orgId }) {
     </div>
   );
 }
-
-<section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
-        <div className="action-grid">
-          {[
-            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
-            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
-            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
-            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
-          ].map(([icon, title, body]) => (
-            <div key={title} className="action-card">
-              <div className="action-icon">{icon}</div>
-              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
