@@ -128,6 +128,10 @@ export default function Dashboard() {
   const router = useRouter();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [copiedCard, setCopiedCard] = useState(null);
+  const copyTimer = useRef(null);
+
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -148,6 +152,41 @@ export default function Dashboard() {
   if (!data) return <main className="mx-auto max-w-4xl px-6 py-16 text-sm text-ink-400">Loading dashboard…</main>;
 
   const { org, usage } = data;
+
+  // Share-and-operate cards: two of them copy install/link values on click.
+  const backend = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+  const widgetSnippet = `<script src="${backend}/widget.js?org=${org.id}" defer></script>`;
+  const chatLink = `${backend}/bot/${org.id}`;
+
+  /** Clipboard with a fallback for non-secure contexts (http previews). */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  async function copyAction(item) {
+    if (await copyText(item.copy)) {
+      setCopiedCard(item.title);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopiedCard((c) => (c === item.title ? null : c)), 2000);
+    }
+  }
 
   // The free tier's allowance is one-time (lifetime), not monthly — so label it
   // against the all-time count rather than this month's, which never resets it.
@@ -207,17 +246,51 @@ export default function Dashboard() {
         <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
         <div className="action-grid">
           {[
-            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
-            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
-            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
-            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
-          ].map(([icon, title, body]) => (
-            <div key={title} className="action-card">
-              <div className="action-icon">{icon}</div>
-              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
-              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
-            </div>
-          ))}
+            { icon: 'AI', title: 'Test assistant', body: 'Preview how your bot answers before customers see it.' },
+            { icon: 'KB', title: 'Train knowledge', body: `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.` },
+            // The widget/link cards copy their value on click — same values as
+            // the Install panel below, one click less to get them.
+            { icon: 'JS', title: 'Install widget', body: 'Add the assistant to your website with one script.', copy: widgetSnippet, copyName: 'embed snippet' },
+            { icon: '↗', title: 'Share chat link', body: 'Use the direct link in QR codes, bios, and campaigns.', copy: chatLink, copyName: 'chat link' },
+          ].map((item) => {
+            const copied = copiedCard === item.title;
+            const content = (
+              <>
+                <div className="action-icon">{copied ? '✓' : item.icon}</div>
+                <h3 className="text-base font-semibold text-ink-900">{item.title}</h3>
+                {copied ? (
+                  <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-ink-900">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                    Copied to clipboard
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm leading-6 text-ink-500">{item.body}</p>
+                )}
+              </>
+            );
+
+            if (!item.copy) {
+              return (
+                <div key={item.title} className="action-card">
+                  {content}
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={item.title}
+                type="button"
+                aria-label={`Copy ${item.copyName} to clipboard`}
+                onClick={() => copyAction(item)}
+                className={`action-card action-card-clickable ${copied ? 'action-card-copied' : ''}`}
+              >
+                {content}
+              </button>
+            );
+          })}
         </div>
       </section>
     </main>
