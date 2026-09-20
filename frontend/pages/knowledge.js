@@ -100,11 +100,11 @@ export default function Knowledge() {
   return (
     <main className="page-shell">
       {/* Page header */}
-      <div className="mb-8 rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-premium sm:px-7">
+      <div className="mb-7 border-b border-gray-200 pb-7">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="eyebrow mb-2">Training sources</p>
-          <h1 className="h-display text-3xl sm:text-4xl">Knowledge base</h1>
+          <h1 className="h-display text-3xl sm:text-[34px]">Knowledge base</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">Upload, paste, or import the information your assistant should use when answering customers.</p>
         </div>
         <span className="chip w-fit">{docs.length} document{docs.length === 1 ? '' : 's'}</span>
@@ -118,8 +118,8 @@ export default function Knowledge() {
       {/* Add sources */}
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Crawl */}
-        <form onSubmit={crawl} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><GlobeIcon /></div>
+        <form onSubmit={crawl} className="flex min-h-[238px] flex-col rounded-md bg-[#eef7ff] p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white/70"><GlobeIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Website</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Crawl a page and learn its content.</p>
           <div className="mt-auto space-y-2.5">
@@ -129,8 +129,8 @@ export default function Knowledge() {
         </form>
 
         {/* Upload */}
-        <div className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><FileIcon /></div>
+        <div className="flex min-h-[238px] flex-col rounded-md bg-[#f7f7f7] p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white"><FileIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Upload file</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">PDF, TXT, MD or CSV (max 5MB).</p>
           <div className="mt-auto space-y-2.5">
@@ -140,8 +140,8 @@ export default function Knowledge() {
         </div>
 
         {/* Manual */}
-        <form onSubmit={addText} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><PenIcon /></div>
+        <form onSubmit={addText} className="flex min-h-[238px] flex-col rounded-md bg-[#fff7e8] p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white/75"><PenIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Paste text</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">FAQs, hours, services — anything.</p>
           <div className="mt-auto space-y-2.5">
@@ -154,9 +154,9 @@ export default function Knowledge() {
         </form>
 
         {/* Google Drive */}
-        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
+        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
           <input type="hidden" name="kind" defaultValue="drive" />
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><DriveIcon /></div>
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><DriveIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Google Drive</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a shared file (TXT, MD, CSV or PDF).</p>
           <div className="mt-auto space-y-2.5">
@@ -166,9 +166,9 @@ export default function Knowledge() {
         </form>
 
         {/* Notion */}
-        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
+        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
           <input type="hidden" name="kind" defaultValue="notion" />
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><NotionIcon /></div>
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><NotionIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Notion</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a page shared publicly (&quot;Share to web&quot;).</p>
           <div className="mt-auto space-y-2.5">

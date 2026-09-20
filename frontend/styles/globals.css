@@ -9,9 +9,7 @@ html {
 
 body {
   @apply bg-white text-ink-900 antialiased;
-  background:
-    radial-gradient(circle at top left, rgba(17, 24, 39, 0.055), transparent 30rem),
-    linear-gradient(180deg, #ffffff 0%, #fafafa 42%, #f5f5f5 100%);
+  background: #ffffff;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
@@ -28,11 +26,11 @@ body {
   }
 
   .page-shell {
-    @apply mx-auto max-w-6xl px-5 py-8 sm:px-6 sm:py-10 lg:py-12;
+    @apply mx-auto max-w-6xl px-5 py-7 sm:px-6 sm:py-9 lg:py-10;
   }
 
   .page-panel {
-    @apply rounded-lg border border-gray-200 bg-white/90 shadow-premium backdrop-blur;
+    @apply rounded-md border border-gray-200 bg-white;
   }
 
   .section-header {
@@ -41,17 +39,17 @@ body {
 
   /* Card — flat surface, single border + hairline shadow */
   .card {
-    @apply rounded-lg border border-gray-200 bg-white shadow-premium;
+    @apply rounded-md border border-gray-200 bg-white;
   }
 
   /* Primary button — solid accent */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-ink-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-all duration-150 hover:-translate-y-px hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-ink-900 px-5 py-2.5 text-sm font-medium text-white transition-colors duration-150 hover:bg-black focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* Secondary button — outlined */
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-all duration-150 hover:-translate-y-px hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   /* Text link button */
@@ -61,7 +59,7 @@ body {
 
   /* Input */
   .input-base {
-    @apply w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 shadow-inner-soft transition-colors duration-150 focus:border-ink-900 focus:outline-none focus:ring-2 focus:ring-ink-900/10;
+    @apply w-full rounded-md border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors duration-150 focus:border-ink-900 focus:outline-none focus:ring-2 focus:ring-ink-900/10;
   }
 
   /* Eyebrow label */
@@ -71,19 +69,19 @@ body {
 
   /* Badge / chip */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-ink-700;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-ink-700;
   }
 
   .chip-accent {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] font-medium text-ink-700;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] font-medium text-ink-700;
   }
 
   .chip-success {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700;
   }
 
   .chip-warning {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700;
   }
 
   /* Divider */
@@ -94,19 +92,19 @@ body {
   /* ---- Legacy aliases (older pages) mapped to the new system ---- */
   .glass-card,
   .quiet-card {
-    @apply rounded-lg border border-gray-200 bg-white shadow-premium;
+    @apply rounded-md border border-gray-200 bg-white;
   }
   .glass-hover {
-    @apply rounded-lg border border-gray-200 bg-white shadow-premium transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg;
+    @apply rounded-md border border-gray-200 bg-white transition-colors duration-150 hover:border-gray-300 hover:bg-gray-50;
   }
   .input-min {
-    @apply w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 shadow-inner-soft transition-colors duration-150 focus:border-ink-900 focus:outline-none focus:ring-2 focus:ring-ink-900/10;
+    @apply w-full rounded-md border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 transition-colors duration-150 focus:border-ink-900 focus:outline-none focus:ring-2 focus:ring-ink-900/10;
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-all duration-150 hover:-translate-y-px hover:border-gray-400 hover:bg-gray-50 focus:outline-none disabled:translate-y-0 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none disabled:opacity-50;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:bg-gray-50 focus:outline-none disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-ink-700 transition-colors duration-150 hover:bg-gray-50 focus:outline-none disabled:opacity-50;
   }
   .heading-serif {
     @apply font-sans font-semibold tracking-tight text-ink-900;

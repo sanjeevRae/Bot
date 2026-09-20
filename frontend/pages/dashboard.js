@@ -166,23 +166,23 @@ export default function Dashboard() {
 
   return (
     <main className="page-shell">
-      <section className="mb-8 rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-premium sm:px-7">
+      <section className="mb-7 border-b border-gray-200 pb-7">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
             <p className="eyebrow mb-2">{org.industry || 'Business'} · Free plan</p>
-            <h1 className="h-display text-3xl sm:text-4xl">{org.name}</h1>
+            <h1 className="h-display text-3xl sm:text-[34px]">{org.name}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
               Monitor usage, test the assistant, and install Chitra AI wherever your customers start conversations.
             </p>
           </div>
-          <span className="chip w-fit border-ink-900/10 bg-ink-900 text-white">Workspace active</span>
+          <span className="chip w-fit">Workspace active</span>
         </div>
       </section>
 
       {/* Stats */}
       <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="glass-hover p-5">
+          <div key={s.label} className="rounded-md bg-gray-50 p-5">
             <div className="text-[11px] font-semibold uppercase tracking-widest text-ink-400">{s.label}</div>
             <div className="mt-3 text-[27px] font-semibold tracking-tight text-ink-900">{s.value}</div>
           </div>
@@ -252,9 +252,9 @@ function TestChat({ orgId }) {
   }
 
   return (
-    <div className="quiet-card flex h-[500px] flex-col overflow-hidden">
+    <div className="flex h-[500px] flex-col overflow-hidden rounded-md border border-gray-200 bg-white">
       <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-900 text-[11px] font-semibold text-white">AI</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 text-[11px] font-semibold text-ink-900">AI</div>
         <div>
           <span className="block text-sm font-semibold text-ink-900">Test your bot</span>
           <span className="text-xs text-ink-400">Private admin preview</span>
@@ -263,18 +263,18 @@ function TestChat({ orgId }) {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live
         </span>
       </div>
-      <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto bg-gray-50/70 p-4">
+      <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto bg-white p-4">
         {messages.map((m, i) => (
           <div key={i} className={`space-y-1 px-3.5 py-2.5 text-sm leading-relaxed ${
             m.who === 'user'
-              ? 'max-w-[85%] self-end rounded-2xl rounded-br-md bg-ink-900 text-white shadow-lift'
-              : 'max-w-[95%] self-start rounded-2xl rounded-bl-md border border-gray-200 bg-white text-ink-900 shadow-sm'
+              ? 'max-w-[85%] self-end rounded-md bg-ink-900 text-white'
+              : 'max-w-[95%] self-start rounded-md bg-gray-50 text-ink-900'
           }`}>
             {m.who === 'bot' ? renderMarkdown(m.text) : <span className="whitespace-pre-wrap">{m.text}</span>}
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-1.5 self-start rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-center gap-1.5 self-start rounded-md bg-gray-50 px-4 py-3">
             {[0, 1, 2].map((i) => (
               <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-400" style={{ animationDelay: `${i * 150}ms` }}></span>
             ))}
@@ -303,7 +303,7 @@ function InstallSection({ orgId }) {
   }
 
   return (
-    <div className="quiet-card space-y-6 p-6">
+    <div className="space-y-6 rounded-md border border-gray-200 bg-white p-6">
       <div>
         <p className="eyebrow mb-2">Distribution</p>
         <h2 className="h-display text-xl">Install on your site</h2>
@@ -317,7 +317,7 @@ function InstallSection({ orgId }) {
             {copied === 'snippet' ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{snippet}</pre>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{snippet}</pre>
       </div>
 
       <div>
@@ -327,10 +327,10 @@ function InstallSection({ orgId }) {
             {copied === 'link' ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <pre className="overflow-x-auto break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>
+        <pre className="overflow-x-auto break-all rounded-md bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>
       </div>
 
-      <p className="rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
+      <p className="rounded-md bg-[#fff7e8] px-3.5 py-3 text-xs leading-relaxed text-ink-500">
         Tip: generate a QR code for the direct link to make a scan-to-chat card.
       </p>
     </div>

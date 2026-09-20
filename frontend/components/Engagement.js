@@ -83,23 +83,23 @@ export default function Engagement({ initialTab = 'all' }) {
   return (
     <main className="page-shell">
       {/* Page header */}
-      <div className="mb-8 rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-premium sm:px-7">
+      <div className="mb-7 border-b border-gray-200 pb-7">
         <p className="eyebrow mb-2">Customer engagement</p>
-        <h1 className="h-display text-3xl sm:text-4xl">Engagement</h1>
+        <h1 className="h-display text-3xl sm:text-[34px]">Engagement</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
           Everything your bot captured with customers: leads, bookings and escalated conversations in one place.
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-8 flex w-full flex-wrap gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-premium">
+      <div className="mb-8 flex w-full flex-wrap justify-end gap-1 border-b border-gray-200 pb-5">
         {TABS.map(([id, label]) => (
           <button
             key={id}
             onClick={() => selectTab(id)}
-            className={`rounded-md px-4 py-2.5 text-sm font-medium transition-all ${
+            className={`rounded-md px-3 py-2 text-xs font-medium transition-colors ${
               tab === id
-                ? 'bg-ink-900 text-white shadow-sm'
+                ? 'bg-ink-900 text-white'
                 : 'text-ink-500 hover:bg-gray-50 hover:text-ink-900'
             }`}
           >
@@ -116,8 +116,8 @@ export default function Engagement({ initialTab = 'all' }) {
               ['Bookings', stat(summary?.bookings), `${summary ? summary.confirmed : '—'} confirmed`, <CalendarIcon key="c" />],
               ['Pending escalations', stat(summary?.pending), 'waiting for a human', <MessageIcon key="m" />],
             ].map(([label, value, hint, icon]) => (
-              <div key={label} className="glass-hover p-5">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50">{icon}</div>
+              <div key={label} className="rounded-md bg-gray-50 p-5">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white">{icon}</div>
                 <div className="text-[28px] font-semibold tracking-tight text-ink-900">{value}</div>
                 <div className="mt-1 text-xs font-semibold uppercase tracking-wider text-ink-400">{label}</div>
                 <div className="mt-1 text-xs text-ink-500">{hint}</div>

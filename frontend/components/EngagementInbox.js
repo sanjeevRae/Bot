@@ -52,7 +52,7 @@ export default function EngagementInbox({ preview, onViewAll }) {
       </div>
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+        <div className="mb-6 rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
       )}
 
       {!items ? (
@@ -93,10 +93,10 @@ export default function EngagementInbox({ preview, onViewAll }) {
                     {c.messages.map((m, i) => (
                       <div
                         key={i}
-                        className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-[13px] ${
+                        className={`max-w-[85%] whitespace-pre-wrap rounded-md px-3.5 py-2.5 text-[13px] ${
                           m.role === 'user'
-                            ? 'ml-auto rounded-br-sm bg-brand-600 text-white'
-                            : 'rounded-bl-sm border border-gray-200 bg-white text-ink-700'
+                            ? 'ml-auto bg-ink-900 text-white'
+                            : 'bg-white text-ink-700'
                         }`}
                       >
                         {m.message}
