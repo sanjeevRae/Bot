@@ -31,6 +31,9 @@ module.exports = {
       boxShadow: {
         sm: '0 1px 2px rgba(17,24,39,0.05)',
         DEFAULT: '0 1px 3px rgba(17,24,39,0.08)',
+        premium: '0 1px 2px rgba(17,24,39,0.04), 0 12px 28px rgba(17,24,39,0.06)',
+        'premium-lg': '0 1px 2px rgba(17,24,39,0.05), 0 18px 42px rgba(17,24,39,0.09)',
+        'inner-soft': 'inset 0 1px 1px rgba(17,24,39,0.03)',
       },
       keyframes: {
         // Testimonial carousel — each swap replays this on the keyed content block.

@@ -3,7 +3,7 @@ import { api, fetchApi, getManagingOrg } from '../lib/supabaseClient';
 
 /* Inline SVG icons (Lucide-style strokes) */
 const Icon = ({ children }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-brand-600">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-ink-900">
     {children}
   </svg>
 );
@@ -98,14 +98,17 @@ export default function Knowledge() {
   const inputCls = 'input-base';
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10 sm:px-6 sm:py-12">
+    <main className="page-shell">
       {/* Page header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end">
+      <div className="mb-8 rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-premium sm:px-7">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h1 className="h-display text-2xl sm:text-[28px]">Knowledge base</h1>
-          <p className="mt-1 text-sm text-ink-500">Everything here teaches your bot what to say.</p>
+          <p className="eyebrow mb-2">Training sources</p>
+          <h1 className="h-display text-3xl sm:text-4xl">Knowledge base</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">Upload, paste, or import the information your assistant should use when answering customers.</p>
         </div>
         <span className="chip w-fit">{docs.length} document{docs.length === 1 ? '' : 's'}</span>
+        </div>
       </div>
 
       {error && (
@@ -115,9 +118,9 @@ export default function Knowledge() {
       {/* Add sources */}
       <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Crawl */}
-        <form onSubmit={crawl} className="card flex flex-col p-5 transition-colors duration-150 hover:border-gray-300">
-          <div className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-brand-100 bg-brand-50"><GlobeIcon /></div>
-          <h3 className="mb-0.5 text-sm font-semibold text-ink-900">Website</h3>
+        <form onSubmit={crawl} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><GlobeIcon /></div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Website</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Crawl a page and learn its content.</p>
           <div className="mt-auto space-y-2.5">
             <input name="url" required placeholder="https://yoursite.com" className={`${inputCls} !py-2 text-[13px]`} />
@@ -126,9 +129,9 @@ export default function Knowledge() {
         </form>
 
         {/* Upload */}
-        <div className="card flex flex-col p-5 transition-colors duration-150 hover:border-gray-300">
-          <div className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-brand-100 bg-brand-50"><FileIcon /></div>
-          <h3 className="mb-0.5 text-sm font-semibold text-ink-900">Upload file</h3>
+        <div className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><FileIcon /></div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Upload file</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">PDF, TXT, MD or CSV (max 5MB).</p>
           <div className="mt-auto space-y-2.5">
             <input ref={fileRef} type="file" accept=".pdf,.txt,.md,.csv" className="w-full text-xs text-ink-500 file:mr-3 file:cursor-pointer file:rounded-md file:border file:border-gray-300 file:bg-white file:px-2.5 file:py-1.5 file:text-xs file:font-medium file:text-ink-700 hover:file:bg-gray-50" />
@@ -137,9 +140,9 @@ export default function Knowledge() {
         </div>
 
         {/* Manual */}
-        <form onSubmit={addText} className="card flex flex-col p-5 transition-colors duration-150 hover:border-gray-300">
-          <div className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-brand-100 bg-brand-50"><PenIcon /></div>
-          <h3 className="mb-0.5 text-sm font-semibold text-ink-900">Paste text</h3>
+        <form onSubmit={addText} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><PenIcon /></div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Paste text</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">FAQs, hours, services — anything.</p>
           <div className="mt-auto space-y-2.5">
             <input placeholder="Title" value={text.title} onChange={(e) => setText({ ...text, title: e.target.value })}
@@ -151,10 +154,10 @@ export default function Knowledge() {
         </form>
 
         {/* Google Drive */}
-        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="card flex flex-col p-5 transition-colors duration-150 hover:border-gray-300">
+        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
           <input type="hidden" name="kind" defaultValue="drive" />
-          <div className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-brand-100 bg-brand-50"><DriveIcon /></div>
-          <h3 className="mb-0.5 text-sm font-semibold text-ink-900">Google Drive</h3>
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><DriveIcon /></div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Google Drive</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a shared file (TXT, MD, CSV or PDF).</p>
           <div className="mt-auto space-y-2.5">
             <input name="url" required placeholder="https://drive.google.com/file/d/…" className={`${inputCls} !py-2 text-[13px]`} />
@@ -163,10 +166,10 @@ export default function Knowledge() {
         </form>
 
         {/* Notion */}
-        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="card flex flex-col p-5 transition-colors duration-150 hover:border-gray-300">
+        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="card flex min-h-[238px] flex-col p-5 transition-all duration-150 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-premium-lg">
           <input type="hidden" name="kind" defaultValue="notion" />
-          <div className="mb-3.5 flex h-9 w-9 items-center justify-center rounded-lg border border-brand-100 bg-brand-50"><NotionIcon /></div>
-          <h3 className="mb-0.5 text-sm font-semibold text-ink-900">Notion</h3>
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 bg-gray-50"><NotionIcon /></div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Notion</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a page shared publicly (&quot;Share to web&quot;).</p>
           <div className="mt-auto space-y-2.5">
             <input name="url" required placeholder="https://notion.so/your-page" className={`${inputCls} !py-2 text-[13px]`} />
@@ -177,19 +180,19 @@ export default function Knowledge() {
 
       {/* Document list */}
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-ink-900">Your documents</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">Your documents</h2>
       </div>
       {docs.length === 0 ? (
-        <div className="card p-10 text-center">
+        <div className="card p-12 text-center">
           <p className="text-sm font-medium text-ink-700">No documents yet</p>
           <p className="mt-1 text-sm text-ink-400">Add your first source above to start teaching your bot.</p>
         </div>
       ) : (
         <div className="card divide-y divide-gray-100 overflow-hidden">
           {docs.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-4 px-5 py-3.5 transition-colors hover:bg-gray-50">
+            <div key={d.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-gray-50">
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-ink-900">{d.title}</div>
+                <div className="truncate text-sm font-semibold text-ink-900">{d.title}</div>
                 <div className="mt-0.5 truncate text-xs text-ink-400">
                   {d.source_type} · {new Date(d.created_at).toLocaleDateString()}
                   {d.url ? ` · ${d.url}` : ''}

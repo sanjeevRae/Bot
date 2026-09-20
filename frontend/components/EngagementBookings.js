@@ -30,7 +30,7 @@ export default function EngagementBookings({ preview, onViewAll }) {
   return (
     <section>
       {/* Page header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end">
+      <div className="section-header">
         <div>
           <h1 className="h-display text-2xl sm:text-[28px]">Bookings</h1>
           <p className="mt-1 text-sm text-ink-500">Appointments your bot has made with customers.</p>
@@ -52,7 +52,7 @@ export default function EngagementBookings({ preview, onViewAll }) {
       ) : (
         <div className="space-y-3">
           {shown.map((b) => (
-            <div key={b.id} className="card flex flex-col justify-between gap-4 p-5 sm:flex-row sm:items-center">
+            <div key={b.id} className="card flex flex-col justify-between gap-4 p-5 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-ink-900">{b.customer_name}</span>

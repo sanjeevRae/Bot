@@ -39,7 +39,7 @@ export default function EngagementInbox({ preview, onViewAll }) {
   return (
     <section>
       {/* Page header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end">
+      <div className="section-header">
         <div>
           <h1 className="h-display text-2xl sm:text-[28px]">Inbox</h1>
           <p className="mt-1 text-sm text-ink-500">
@@ -82,7 +82,7 @@ export default function EngagementInbox({ preview, onViewAll }) {
                     Requested {new Date(c.requestedAt).toLocaleString()}
                   </p>
                 </div>
-                <span className="shrink-0 text-xs font-medium text-brand-600">
+                <span className="shrink-0 text-xs font-semibold text-ink-900">
                   {open === c.sessionId ? 'Hide' : 'View'}
                 </span>
               </button>

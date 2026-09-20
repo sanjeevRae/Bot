@@ -165,21 +165,31 @@ export default function Dashboard() {
   ];
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <p className="eyebrow mb-1">{org.industry || 'Business'} · Free plan</p>
-      <h1 className="mb-10 text-3xl font-semibold tracking-tight text-ink-900">{org.name}</h1>
+    <main className="page-shell">
+      <section className="mb-8 rounded-lg border border-gray-200 bg-white px-6 py-6 shadow-premium sm:px-7">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="eyebrow mb-2">{org.industry || 'Business'} · Free plan</p>
+            <h1 className="h-display text-3xl sm:text-4xl">{org.name}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
+              Monitor usage, test the assistant, and install Chitra AI wherever your customers start conversations.
+            </p>
+          </div>
+          <span className="chip w-fit border-ink-900/10 bg-ink-900 text-white">Workspace active</span>
+        </div>
+      </section>
 
       {/* Stats */}
-      <div className="mb-12 grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="glass-hover p-5">
-            <div className="text-[26px] font-semibold tracking-tight text-ink-900">{s.value}</div>
-            <div className="mt-1 text-xs text-ink-400">{s.label}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-ink-400">{s.label}</div>
+            <div className="mt-3 text-[27px] font-semibold tracking-tight text-ink-900">{s.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr]">
         <TestChat orgId={org.id} />
         <InstallSection orgId={org.id} />
       </div>
@@ -242,36 +252,39 @@ function TestChat({ orgId }) {
   }
 
   return (
-    <div className="quiet-card flex h-[480px] flex-col overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-white/70 px-5 py-3.5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-[11px] font-semibold text-white">C</div>
-        <span className="text-sm font-medium text-ink-900">Test your bot</span>
-        <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600">
+    <div className="quiet-card flex h-[500px] flex-col overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-4">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-900 text-[11px] font-semibold text-white">AI</div>
+        <div>
+          <span className="block text-sm font-semibold text-ink-900">Test your bot</span>
+          <span className="text-xs text-ink-400">Private admin preview</span>
+        </div>
+        <span className="ml-auto flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> Live
         </span>
       </div>
-      <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+      <div ref={boxRef} className="flex flex-1 flex-col gap-2.5 overflow-y-auto bg-gray-50/70 p-4">
         {messages.map((m, i) => (
           <div key={i} className={`space-y-1 px-3.5 py-2.5 text-sm leading-relaxed ${
             m.who === 'user'
-              ? 'max-w-[85%] self-end rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-lift'
-              : 'max-w-[95%] self-start rounded-2xl rounded-bl-md border border-white/80 bg-white/80 text-ink-900 backdrop-blur'
+              ? 'max-w-[85%] self-end rounded-2xl rounded-br-md bg-ink-900 text-white shadow-lift'
+              : 'max-w-[95%] self-start rounded-2xl rounded-bl-md border border-gray-200 bg-white text-ink-900 shadow-sm'
           }`}>
             {m.who === 'bot' ? renderMarkdown(m.text) : <span className="whitespace-pre-wrap">{m.text}</span>}
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-1.5 self-start rounded-2xl border border-white/80 bg-white/80 px-4 py-3 backdrop-blur">
+          <div className="flex items-center gap-1.5 self-start rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
             {[0, 1, 2].map((i) => (
-              <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-400" style={{ animationDelay: `${i * 150}ms` }}></span>
+              <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-400" style={{ animationDelay: `${i * 150}ms` }}></span>
             ))}
           </div>
         )}
       </div>
-      <form onSubmit={send} className="flex border-t border-white/70 bg-white/50">
+      <form onSubmit={send} className="flex border-t border-gray-200 bg-white">
         <input value={input} onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a question…" className="flex-1 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-ink-400" />
-        <button className="px-5 text-sm font-medium text-brand-600 transition-colors hover:text-brand-800">Send</button>
+        <button className="px-5 text-sm font-semibold text-ink-900 transition-colors hover:text-black">Send</button>
       </form>
     </div>
   );
@@ -291,29 +304,33 @@ function InstallSection({ orgId }) {
 
   return (
     <div className="quiet-card space-y-6 p-6">
-      <h2 className="text-sm font-medium text-ink-900">Install on your site</h2>
+      <div>
+        <p className="eyebrow mb-2">Distribution</p>
+        <h2 className="h-display text-xl">Install on your site</h2>
+        <p className="mt-1 text-sm leading-6 text-ink-500">Use the embed for websites or share the direct chat link across social profiles, QR codes, and campaigns.</p>
+      </div>
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-xs text-ink-500">1 · Embed widget (any website)</span>
-          <button onClick={() => copy(snippet, 'snippet')} className="text-xs font-medium text-brand-600 hover:text-brand-800">
+          <span className="text-xs font-semibold uppercase tracking-wider text-ink-500">Embed widget</span>
+          <button onClick={() => copy(snippet, 'snippet')} className="text-xs font-semibold text-ink-900 hover:text-black">
             {copied === 'snippet' ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-white/60 bg-gray-900/[0.05] p-3 text-xs leading-relaxed text-ink-700">{snippet}</pre>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{snippet}</pre>
       </div>
 
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <span className="text-xs text-ink-500">2 · Direct chat link (QR codes, bio)</span>
-          <button onClick={() => copy(botLink, 'link')} className="text-xs font-medium text-brand-600 hover:text-brand-800">
+          <span className="text-xs font-semibold uppercase tracking-wider text-ink-500">Direct chat link</span>
+          <button onClick={() => copy(botLink, 'link')} className="text-xs font-semibold text-ink-900 hover:text-black">
             {copied === 'link' ? '✓ Copied' : 'Copy'}
           </button>
         </div>
-        <pre className="overflow-x-auto break-all rounded-xl border border-white/60 bg-gray-900/[0.05] p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>
+        <pre className="overflow-x-auto break-all rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>
       </div>
 
-      <p className="text-xs leading-relaxed text-ink-400">
+      <p className="rounded-lg border border-gray-200 bg-gray-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
         Tip: generate a QR code for the direct link to make a scan-to-chat card.
       </p>
     </div>

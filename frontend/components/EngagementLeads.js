@@ -32,7 +32,7 @@ export default function EngagementLeads({ preview, onViewAll }) {
   return (
     <section>
       {/* Page header */}
-      <div className="mb-8 flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 sm:flex-row sm:items-end">
+      <div className="section-header">
         <div>
           <h1 className="h-display text-2xl sm:text-[28px]">Leads</h1>
           <p className="mt-1 text-sm text-ink-500">Visitors who shared their contact info with your bot.</p>
@@ -42,16 +42,19 @@ export default function EngagementLeads({ preview, onViewAll }) {
 
       {error && <p className="mb-6 text-sm text-red-500">{error}</p>}
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {leads.length === 0 && (
-          <div className="glass-card p-10 text-center text-sm text-ink-400">
-            No leads yet. When a visitor shares their name/phone/email in chat, they&apos;ll appear here.
+          <div className="glass-card p-12 text-center">
+            <p className="text-sm font-medium text-ink-700">No leads yet</p>
+            <p className="mx-auto mt-1 max-w-sm text-sm text-ink-400">
+              When a visitor shares their name, phone, or email in chat, they&apos;ll appear here.
+            </p>
           </div>
         )}
         {shown.map((l) => (
-          <div key={l.id} className="quiet-card flex items-center justify-between px-5 py-4">
-            <div>
-              <div className="text-sm font-medium text-ink-900">{l.lead_name || 'Unknown name'}</div>
+          <div key={l.id} className="quiet-card flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-gray-50">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-ink-900">{l.lead_name || 'Unknown name'}</div>
               <div className="mt-0.5 text-xs text-ink-500">{l.contact_info}</div>
               {l.notes && <div className="mt-0.5 text-xs text-ink-400">{l.notes}</div>}
               <div className="mt-1 text-[11px] text-gray-300">{new Date(l.created_at).toLocaleString()}</div>
