@@ -63,10 +63,10 @@ export default function App({ Component, pageProps }) {
 
   const nav = (
     <nav className="sticky top-0 z-40 border-b border-gray-200 bg-white">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-3 text-[15px] font-semibold tracking-tight text-ink-900">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black text-xs font-semibold text-white">AI</span>
-          <span className="hidden truncate sm:block">Chitra AI Workspace</span>
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-3.5">
+        <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-ink-900">
+          <img src="/logo.png" alt="Chitra AI logo" className="h-7 w-7 rounded-md object-contain" />
+          Chitra AI
         </Link>
 
         {/* Desktop nav */}

@@ -92,13 +92,6 @@ export default function Engagement({ initialTab = 'all' }) {
               Everything your bot captured with customers: leads, bookings and escalated conversations in one place.
             </p>
           </div>
-          <div className="workspace-steps">
-            <span className="workspace-step">Dashboard</span>
-            <span>{'>'}</span>
-            <span className="workspace-step">Knowledge</span>
-            <span>{'>'}</span>
-            <span className="workspace-step-active">Engagement</span>
-          </div>
         </div>
       </div>
 

@@ -175,13 +175,6 @@ export default function Dashboard() {
               Manage the assistant, review usage, and install Chitra AI where customers already ask questions.
             </p>
         </div>
-        <div className="workspace-steps">
-          <span className="workspace-step-active">Dashboard</span>
-          <span>›</span>
-          <span className="workspace-step">Knowledge</span>
-          <span>›</span>
-          <span className="workspace-step">Engagement</span>
-        </div>
         </div>
       </section>
 

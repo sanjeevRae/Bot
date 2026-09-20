@@ -107,13 +107,6 @@ export default function Knowledge() {
           <h1 className="h-display text-3xl sm:text-[34px]">Knowledge base</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">Upload, paste, or import the information your assistant should use when answering customers.</p>
         </div>
-        <div className="workspace-steps">
-          <span className="workspace-step">Dashboard</span>
-          <span>›</span>
-          <span className="workspace-step-active">Knowledge</span>
-          <span>›</span>
-          <span className="workspace-step">Engagement</span>
-        </div>
         </div>
       </div>
 
