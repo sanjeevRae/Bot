@@ -107,7 +107,13 @@ export default function Knowledge() {
           <h1 className="h-display text-3xl sm:text-[34px]">Knowledge base</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">Upload, paste, or import the information your assistant should use when answering customers.</p>
         </div>
-        <span className="chip w-fit">{docs.length} document{docs.length === 1 ? '' : 's'}</span>
+        <div className="workspace-steps">
+          <span className="workspace-step">Dashboard</span>
+          <span>›</span>
+          <span className="workspace-step-active">Knowledge</span>
+          <span>›</span>
+          <span className="workspace-step">Engagement</span>
+        </div>
         </div>
       </div>
 
@@ -125,8 +131,8 @@ export default function Knowledge() {
       {/* Add sources */}
       <div className="mb-10 grid gap-4 lg:grid-cols-3">
         {/* Crawl */}
-        <form onSubmit={crawl} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><GlobeIcon /></div>
+        <form onSubmit={crawl} className="action-card flex flex-col">
+          <div className="action-icon"><GlobeIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Website</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Crawl a page and learn its content.</p>
           <div className="mt-auto space-y-2.5">
@@ -136,8 +142,8 @@ export default function Knowledge() {
         </form>
 
         {/* Upload */}
-        <div className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><FileIcon /></div>
+        <div className="action-card flex flex-col">
+          <div className="action-icon"><FileIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Upload file</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">PDF, TXT, MD or CSV (max 5MB).</p>
           <div className="mt-auto space-y-2.5">
@@ -147,8 +153,8 @@ export default function Knowledge() {
         </div>
 
         {/* Manual */}
-        <form onSubmit={addText} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><PenIcon /></div>
+        <form onSubmit={addText} className="action-card flex flex-col">
+          <div className="action-icon"><PenIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Paste text</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">FAQs, hours, services — anything.</p>
           <div className="mt-auto space-y-2.5">
@@ -169,9 +175,9 @@ export default function Knowledge() {
           <span className="text-xs text-ink-400">Optional imports</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="flex min-h-[188px] flex-col rounded-md border border-gray-200 bg-white p-5">
+        <form onSubmit={(e) => { e.target.kind.value = 'drive'; importUrl(e); }} className="action-card flex flex-col">
           <input type="hidden" name="kind" defaultValue="drive" />
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><DriveIcon /></div>
+          <div className="action-icon"><DriveIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Google Drive</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a shared file (TXT, MD, CSV or PDF).</p>
           <div className="mt-auto space-y-2.5">
@@ -181,9 +187,9 @@ export default function Knowledge() {
         </form>
 
         {/* Notion */}
-        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="flex min-h-[188px] flex-col rounded-md border border-gray-200 bg-white p-5">
+        <form onSubmit={(e) => { e.target.kind.value = 'notion'; importUrl(e); }} className="action-card flex flex-col">
           <input type="hidden" name="kind" defaultValue="notion" />
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><NotionIcon /></div>
+          <div className="action-icon"><NotionIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Notion</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Import a page shared publicly (&quot;Share to web&quot;).</p>
           <div className="mt-auto space-y-2.5">
@@ -202,21 +208,28 @@ export default function Knowledge() {
         </div>
       </div>
       {docs.length === 0 ? (
-        <div className="card p-12 text-center">
+        <div className="data-panel p-12 text-center">
           <p className="text-sm font-medium text-ink-700">No documents yet</p>
           <p className="mt-1 text-sm text-ink-400">Add your first source above to start teaching your bot.</p>
         </div>
       ) : (
-        <div className="card divide-y divide-gray-100 overflow-hidden">
+        <div className="data-panel">
+          <div className="data-head hidden sm:grid sm:grid-cols-[2fr_1fr_auto]">
+            <span>Name</span>
+            <span>Source</span>
+            <span>Status</span>
+          </div>
+          <div className="divide-y divide-gray-100">
           {docs.map((d) => (
-            <div key={d.id} className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-gray-50">
+            <div key={d.id} className="grid gap-4 px-5 py-4 text-sm text-ink-700 transition-colors hover:bg-gray-50 sm:grid-cols-[2fr_1fr_auto] sm:items-center">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-ink-900">{d.title}</div>
+                <div className="truncate font-medium text-ink-900">{d.title}</div>
                 <div className="mt-0.5 truncate text-xs text-ink-400">
                   {d.source_type} · {new Date(d.created_at).toLocaleDateString()}
                   {d.url ? ` · ${d.url}` : ''}
                 </div>
               </div>
+              <div className="text-xs text-ink-500">{d.source_type}</div>
               <div className="flex shrink-0 items-center gap-3">
                 <span className={
                   d.status === 'ready' ? 'chip-success' :
@@ -231,6 +244,7 @@ export default function Knowledge() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
     </main>

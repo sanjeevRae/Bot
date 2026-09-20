@@ -166,8 +166,8 @@ export default function Dashboard() {
 
   return (
     <main className="page-shell">
-      <section className="mb-7 border-b border-gray-200 pb-7">
-        <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
+      <section className="workspace-top">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
         <div>
             <p className="eyebrow mb-2">{org.industry || 'Business'} · Free plan</p>
             <h1 className="h-display text-3xl sm:text-[34px]">{org.name}</h1>
@@ -175,14 +175,51 @@ export default function Dashboard() {
               Manage the assistant, review usage, and install Chitra AI where customers already ask questions.
             </p>
         </div>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200">
-          {stats.map((s) => (
-            <div key={s.label} className="bg-white p-4">
-              <div className="text-[22px] font-semibold tracking-tight text-ink-900">{s.value}</div>
-              <div className="mt-1 text-[11px] leading-4 text-ink-500">{s.label}</div>
+        <div className="workspace-steps">
+          <span className="workspace-step-active">Dashboard</span>
+          <span>›</span>
+          <span className="workspace-step">Knowledge</span>
+          <span>›</span>
+          <span className="workspace-step">Engagement</span>
+        </div>
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Assistant control center</h2>
+        <div className="action-grid">
+          {[
+            ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
+            ['KB', 'Train knowledge', `${usage.documents} source${usage.documents === 1 ? '' : 's'} available to the assistant.`],
+            ['JS', 'Install widget', 'Add the assistant to your website with one script.'],
+            ['↗', 'Share chat link', 'Use the direct link in QR codes, bios, and campaigns.'],
+          ].map(([icon, title, body]) => (
+            <div key={title} className="action-card">
+              <div className="action-icon">{icon}</div>
+              <h3 className="text-base font-semibold text-ink-900">{title}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink-500">{body}</p>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Performance</h2>
+        <div className="data-panel">
+          <div className="data-head grid-cols-[1.5fr_1fr_1fr]">
+            <span>Name</span>
+            <span>Usage</span>
+            <span>Status</span>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {stats.map((s) => (
+              <div key={s.label} className="data-row grid-cols-[1.5fr_1fr_1fr]">
+                <span className="font-medium text-ink-900">{s.label}</span>
+                <span>{s.value}</span>
+                <span className="text-ink-500">Active</span>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

@@ -26,7 +26,56 @@ body {
   }
 
   .page-shell {
-    @apply mx-auto max-w-6xl px-5 py-7 sm:px-6 sm:py-9 lg:py-10;
+    @apply mx-auto max-w-7xl px-5 py-7 sm:px-6 sm:py-9 lg:py-10;
+  }
+
+  .workspace-top {
+    @apply mb-10 border-b border-gray-200 pb-6;
+  }
+
+  .workspace-kicker {
+    @apply text-xs font-semibold uppercase tracking-widest text-ink-400;
+  }
+
+  .workspace-title {
+    @apply mt-2 text-[28px] font-semibold tracking-tight text-ink-900 sm:text-[34px];
+    letter-spacing: -0.025em;
+  }
+
+  .workspace-steps {
+    @apply flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-400;
+  }
+
+  .workspace-step {
+    @apply rounded-md px-3 py-2 text-ink-500 transition-colors hover:bg-gray-50 hover:text-ink-900;
+  }
+
+  .workspace-step-active {
+    @apply rounded-md bg-gray-50 px-3 py-2 text-ink-900;
+  }
+
+  .action-grid {
+    @apply grid gap-4 md:grid-cols-2 xl:grid-cols-4;
+  }
+
+  .action-card {
+    @apply min-h-[180px] rounded-md border border-gray-200 bg-white p-5 transition-colors hover:border-gray-300 hover:bg-gray-50;
+  }
+
+  .action-icon {
+    @apply mb-8 flex h-11 w-11 items-center justify-center rounded-md bg-gray-50 text-sm font-semibold text-ink-900;
+  }
+
+  .data-panel {
+    @apply overflow-hidden rounded-md border border-gray-200 bg-white;
+  }
+
+  .data-head {
+    @apply grid gap-4 border-b border-gray-200 bg-gray-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-ink-500;
+  }
+
+  .data-row {
+    @apply grid gap-4 px-5 py-4 text-sm text-ink-700;
   }
 
   .page-panel {
