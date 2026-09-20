@@ -26,11 +26,11 @@ body {
   }
 
   .page-shell {
-    @apply mx-auto max-w-7xl px-5 py-7 sm:px-6 sm:py-9 lg:py-10;
+    @apply mx-auto max-w-7xl px-5 py-8 sm:px-6 lg:px-8 lg:py-11;
   }
 
   .workspace-top {
-    @apply mb-10 border-b border-gray-200 pb-6;
+    @apply mb-10 border-b border-gray-200 pb-8;
   }
 
   .workspace-kicker {
@@ -59,15 +59,15 @@ body {
   }
 
   .action-card {
-    @apply min-h-[180px] rounded-md border border-gray-200 bg-white p-5 transition-colors hover:border-gray-300 hover:bg-gray-50;
+    @apply min-h-[210px] rounded-lg border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(17,24,39,0.04),0_8px_24px_rgba(17,24,39,0.04)] transition-colors hover:border-gray-300;
   }
 
   .action-icon {
-    @apply mb-8 flex h-11 w-11 items-center justify-center rounded-md bg-gray-50 text-sm font-semibold text-ink-900;
+    @apply mb-8 flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm font-semibold text-ink-900;
   }
 
   .data-panel {
-    @apply overflow-hidden rounded-md border border-gray-200 bg-white;
+    @apply overflow-hidden rounded-lg border border-gray-200 bg-white;
   }
 
   .data-head {

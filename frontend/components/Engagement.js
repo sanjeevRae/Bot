@@ -83,16 +83,32 @@ export default function Engagement({ initialTab = 'all' }) {
   return (
     <main className="page-shell">
       {/* Page header */}
-      <div className="mb-7 border-b border-gray-200 pb-7">
-        <p className="eyebrow mb-2">Customer engagement</p>
-        <h1 className="h-display text-3xl sm:text-[34px]">Engagement</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
-          Everything your bot captured with customers: leads, bookings and escalated conversations in one place.
-        </p>
+      <div className="workspace-top">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+          <div>
+            <p className="workspace-kicker">Customer engagement</p>
+            <h1 className="workspace-title">Engagement</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
+              Everything your bot captured with customers: leads, bookings and escalated conversations in one place.
+            </p>
+          </div>
+          <div className="workspace-steps">
+            <span className="workspace-step">Dashboard</span>
+            <span>{'>'}</span>
+            <span className="workspace-step">Knowledge</span>
+            <span>{'>'}</span>
+            <span className="workspace-step-active">Engagement</span>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="mb-8 flex w-full flex-wrap justify-end gap-1 border-b border-gray-200 pb-5">
+      <div className="mb-8 flex w-full flex-col justify-between gap-4 border-b border-gray-200 pb-5 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-tight text-ink-900">Customer activity</h2>
+          <p className="mt-1 text-sm text-ink-500">Review captured conversations and outcomes.</p>
+        </div>
+        <div className="flex flex-wrap gap-1">
         {TABS.map(([id, label]) => (
           <button
             key={id}
@@ -106,6 +122,7 @@ export default function Engagement({ initialTab = 'all' }) {
             {label}
           </button>
         ))}
+        </div>
       </div>
       {tab === 'all' && (
         <div className="grid gap-8 lg:grid-cols-[280px_1fr]">

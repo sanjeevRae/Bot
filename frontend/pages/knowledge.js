@@ -123,8 +123,8 @@ export default function Knowledge() {
 
       <div className="mb-4 flex items-end justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-ink-900">Add knowledge</h2>
-          <p className="mt-1 text-xs text-ink-500">Start with the fastest source, then add files or integrations when needed.</p>
+          <h2 className="text-[22px] font-semibold tracking-tight text-ink-900">Choose a training method</h2>
+          <p className="mt-1 text-sm text-ink-500">Start with a website, file, or direct text source.</p>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ export default function Knowledge() {
 
       <div className="mb-10">
         <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
-          <h2 className="text-sm font-semibold text-ink-900">Connected sources</h2>
+          <h2 className="text-sm font-semibold text-ink-900">Connected source imports</h2>
           <span className="text-xs text-ink-400">Optional imports</span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -203,7 +203,7 @@ export default function Knowledge() {
       {/* Document list */}
       <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink-900">Manage documents</h2>
+          <h2 className="text-[22px] font-semibold tracking-tight text-ink-900">Knowledge performance</h2>
           <p className="mt-1 text-xs text-ink-500">Review what the assistant can use when answering customers.</p>
         </div>
       </div>

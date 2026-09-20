@@ -186,7 +186,7 @@ export default function Dashboard() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Assistant control center</h2>
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Share and operate your assistant</h2>
         <div className="action-grid">
           {[
             ['AI', 'Test assistant', 'Preview how your bot answers before customers see it.'],
@@ -204,7 +204,7 @@ export default function Dashboard() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Performance</h2>
+        <h2 className="mb-5 text-[22px] font-semibold tracking-tight text-ink-900">Workspace performance</h2>
         <div className="data-panel">
           <div className="data-head grid-cols-[1.5fr_1fr_1fr]">
             <span>Name</span>
