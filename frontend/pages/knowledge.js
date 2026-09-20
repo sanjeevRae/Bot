@@ -125,8 +125,8 @@ export default function Knowledge() {
       {/* Add sources */}
       <div className="mb-10 grid gap-4 lg:grid-cols-3">
         {/* Crawl */}
-        <form onSubmit={crawl} className="flex min-h-[238px] flex-col rounded-md bg-[#eef7ff] p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white/70"><GlobeIcon /></div>
+        <form onSubmit={crawl} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><GlobeIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Website</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">Crawl a page and learn its content.</p>
           <div className="mt-auto space-y-2.5">
@@ -136,8 +136,8 @@ export default function Knowledge() {
         </form>
 
         {/* Upload */}
-        <div className="flex min-h-[238px] flex-col rounded-md bg-[#f7f7f7] p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white"><FileIcon /></div>
+        <div className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><FileIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Upload file</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">PDF, TXT, MD or CSV (max 5MB).</p>
           <div className="mt-auto space-y-2.5">
@@ -147,8 +147,8 @@ export default function Knowledge() {
         </div>
 
         {/* Manual */}
-        <form onSubmit={addText} className="flex min-h-[238px] flex-col rounded-md bg-[#fff7e8] p-5">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white/75"><PenIcon /></div>
+        <form onSubmit={addText} className="flex min-h-[238px] flex-col rounded-md border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-gray-50"><PenIcon /></div>
           <h3 className="mb-1 text-sm font-semibold text-ink-900">Paste text</h3>
           <p className="mb-4 text-xs leading-relaxed text-ink-500">FAQs, hours, services — anything.</p>
           <div className="mt-auto space-y-2.5">

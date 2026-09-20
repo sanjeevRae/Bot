@@ -167,40 +167,28 @@ export default function Dashboard() {
   return (
     <main className="page-shell">
       <section className="mb-7 border-b border-gray-200 pb-7">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
+        <div>
             <p className="eyebrow mb-2">{org.industry || 'Business'} · Free plan</p>
             <h1 className="h-display text-3xl sm:text-[34px]">{org.name}</h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
-              Monitor usage, test the assistant, and install Chitra AI wherever your customers start conversations.
+              Manage the assistant, review usage, and install Chitra AI where customers already ask questions.
             </p>
-          </div>
-          <span className="chip w-fit">Workspace active</span>
+        </div>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200">
+          {stats.map((s) => (
+            <div key={s.label} className="bg-white p-4">
+              <div className="text-[22px] font-semibold tracking-tight text-ink-900">{s.value}</div>
+              <div className="mt-1 text-[11px] leading-4 text-ink-500">{s.label}</div>
+            </div>
+          ))}
+        </div>
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-6">
-          <div className="rounded-md bg-gray-50 p-5 sm:p-6">
-            <div className="mb-5 flex items-center justify-between border-b border-gray-200 pb-4">
-              <div>
-                <h2 className="text-sm font-semibold text-ink-900">Workspace summary</h2>
-                <p className="mt-1 text-xs text-ink-500">A quick view of current usage and activity.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-7">
-              {stats.map((s) => (
-                <div key={s.label}>
-                  <div className="text-[26px] font-semibold tracking-tight text-ink-900">{s.value}</div>
-                  <div className="mt-1 text-xs leading-4 text-ink-500">{s.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <InstallSection orgId={org.id} />
-        </div>
-
+      <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <TestChat orgId={org.id} />
+        <InstallSection orgId={org.id} />
       </section>
     </main>
   );
@@ -339,7 +327,7 @@ function InstallSection({ orgId }) {
         <pre className="overflow-x-auto break-all rounded-md bg-gray-50 p-3 text-xs leading-relaxed text-ink-700">{botLink}</pre>
       </div>
 
-      <p className="rounded-md bg-[#fff7e8] px-3.5 py-3 text-xs leading-relaxed text-ink-500">
+      <p className="rounded-md bg-gray-50 px-3.5 py-3 text-xs leading-relaxed text-ink-500">
         Tip: generate a QR code for the direct link to make a scan-to-chat card.
       </p>
     </div>

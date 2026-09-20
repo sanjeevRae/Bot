@@ -107,31 +107,38 @@ export default function Engagement({ initialTab = 'all' }) {
           </button>
         ))}
       </div>
-{tab === 'all' && (
-        <>
-          {/* Overview counts */}
-          <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {tab === 'all' && (
+        <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+          <aside className="h-fit rounded-md border border-gray-200 bg-white p-5">
+            <div className="mb-5 border-b border-gray-200 pb-4">
+              <h2 className="text-sm font-semibold text-ink-900">Activity summary</h2>
+              <p className="mt-1 text-xs leading-5 text-ink-500">Live customer signals captured by the assistant.</p>
+            </div>
+            <div className="space-y-5">
             {[
               ['Leads captured', stat(summary?.leads), 'shared contact details', <TargetIcon key="t" />],
               ['Bookings', stat(summary?.bookings), `${summary ? summary.confirmed : '—'} confirmed`, <CalendarIcon key="c" />],
               ['Pending escalations', stat(summary?.pending), 'waiting for a human', <MessageIcon key="m" />],
             ].map(([label, value, hint, icon]) => (
-              <div key={label} className="rounded-md bg-gray-50 p-5">
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-md bg-white">{icon}</div>
-                <div className="text-[28px] font-semibold tracking-tight text-ink-900">{value}</div>
-                <div className="mt-1 text-xs font-semibold uppercase tracking-wider text-ink-400">{label}</div>
-                <div className="mt-1 text-xs text-ink-500">{hint}</div>
+              <div key={label} className="flex gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-gray-50">{icon}</div>
+                <div>
+                  <div className="text-[24px] font-semibold leading-none tracking-tight text-ink-900">{value}</div>
+                  <div className="mt-1 text-xs font-semibold text-ink-700">{label}</div>
+                  <div className="mt-0.5 text-xs text-ink-500">{hint}</div>
+                </div>
               </div>
             ))}
-          </div>
+            </div>
+          </aside>
 
           {/* The three sections, each capped to the latest few with a jump link */}
-          <div className="space-y-14">
+          <div className="space-y-12">
             <EngagementLeads preview={3} onViewAll={() => selectTab('leads')} />
             <EngagementBookings preview={3} onViewAll={() => selectTab('bookings')} />
             <EngagementInbox preview={3} onViewAll={() => selectTab('inbox')} />
           </div>
-        </>
+        </div>
       )}
 
       {tab === 'leads' && <EngagementLeads />}
