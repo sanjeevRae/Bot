@@ -70,36 +70,13 @@ export default function App({ Component, pageProps }) {
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden items-center gap-2 text-sm md:flex">
-          {user && (
+        <div className="hidden items-center gap-1 text-sm md:flex">
+          {user ? (
             <>
               {[
                 ['/dashboard', 'Dashboard'],
                 ['/knowledge', 'Knowledge'],
                 ['/engagement', 'Engagement'],
-              ].map(([href, label], index, arr) => (
-                <span key={href} className="flex items-center gap-2">
-                  <Link
-                    href={href}
-                    className={`rounded-lg px-3.5 py-2 font-semibold transition-colors ${
-                      router.pathname === href
-                        ? 'bg-gray-50 text-ink-900'
-                        : 'text-ink-500 hover:bg-gray-50 hover:text-ink-900'
-                    }`}
-                  >
-                    {label}
-                  </Link>
-                  {index < arr.length - 1 && <span className="text-ink-400">›</span>}
-                </span>
-              ))}
-            </>
-          )}
-        </div>
-
-        <div className="hidden items-center gap-1 text-sm md:flex">
-          {user ? (
-            <>
-              {[
                 ['/channels', 'Channels'],
                 ['/agency', 'Clients'],
                 ['/billing', 'Billing'],
@@ -108,11 +85,7 @@ export default function App({ Component, pageProps }) {
                 <Link
                   key={href}
                   href={href}
-                  className={`rounded-lg px-3 py-1.5 transition-colors ${
-                    router.pathname === href
-                      ? 'bg-gray-50 text-ink-900'
-                      : 'text-ink-500 hover:bg-gray-50 hover:text-ink-900'
-                  }`}
+                  className="rounded-lg px-3 py-1.5 text-ink-500 transition-colors hover:bg-gray-900/[0.04] hover:text-ink-900"
                 >
                   {label}
                 </Link>
@@ -120,14 +93,14 @@ export default function App({ Component, pageProps }) {
               {role === 'admin' && (
                 <Link
                   href="/admin"
-                  className="rounded-lg px-3 py-1.5 font-medium text-ink-900 transition-colors hover:bg-gray-50"
+                  className="rounded-lg px-3 py-1.5 font-medium text-brand-600 transition-colors hover:bg-gray-900/[0.04]"
                 >
                   Admin
                 </Link>
               )}
               <button
                 onClick={() => supabase.auth.signOut()}
-                className="ml-2 rounded-lg border border-gray-200 px-3 py-1.5 text-ink-500 transition-colors hover:border-gray-300 hover:text-red-500"
+                className="ml-2 rounded-lg px-3 py-1.5 text-ink-400 transition-colors hover:text-red-500"
               >
                 Sign out
               </button>
