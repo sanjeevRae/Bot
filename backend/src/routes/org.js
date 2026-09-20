@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { messageQuotaFor } = require('../services/quotas');
+const { invalidateOrgContext } = require('../services/orgCache');
 
 const router = express.Router();
 
@@ -83,6 +84,7 @@ router.patch('/settings', requireAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   meCache.delete(req.orgId);
+  invalidateOrgContext(req.orgId); // chat must pick up new bot name/greeting at once
   res.json({ settings: data });
 });
 /** GET /api/org/channels — messaging channel connection status */

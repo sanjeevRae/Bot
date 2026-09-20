@@ -3,12 +3,17 @@ const config = require('../config');
 
 let groq1 = null;
 let groq2 = null;
+/** Hard deadline per LLM call, so one stalled request can't hang a visitor. */
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '15000', 10);
+/** Cap on generated tokens. Answer length dominates generation time: asking for
+ *  800 tokens when the reply needs ~120 makes the visitor wait for the rest. */
+const DEFAULT_MAX_TOKENS = parseInt(process.env.LLM_MAX_TOKENS || '700', 10);
 function getGroq(which = 1) {
   if (which === 2) {
-    if (!groq2) groq2 = new Groq({ apiKey: config.groq2.apiKey });
+    if (!groq2) groq2 = new Groq({ apiKey: config.groq2.apiKey, timeout: LLM_TIMEOUT_MS });
     return groq2;
   }
-  if (!groq1) groq1 = new Groq({ apiKey: config.groq.apiKey });
+  if (!groq1) groq1 = new Groq({ apiKey: config.groq.apiKey, timeout: LLM_TIMEOUT_MS });
   return groq1;
 }
 
@@ -21,27 +26,55 @@ function getGroq(which = 1) {
  */
 const cooldowns = { groq1: 0, groq2: 0, openrouter: 0 }; // epoch ms until which a provider is skipped
 
-function groqRequest(messages, tools, which) {
+/**
+ * How long a 429 may be waited out in-request before giving up on this provider.
+ * Short enough to stay under a visitor's patience, long enough to absorb a
+ * per-minute token-limit window on the fast provider.
+ */
+const MAX_RETRY_WAIT_MS = parseInt(process.env.LLM_RETRY_MAX_WAIT_MS || '1500', 10);
+/** Fallback provider deadline (its free models are slow, so don't wait 30 s). */
+const FALLBACK_TIMEOUT_MS = parseInt(process.env.LLM_FALLBACK_TIMEOUT_MS || '12000', 10);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Read Retry-After (seconds or ms) / x-ratelimit-reset-* hints off an error. */
+function retryAfterMs(err) {
+  const h = err?.headers || err?.response?.headers || {};
+  const get = (name) => (typeof h.get === 'function' ? h.get(name) : h[name]);
+  const raw = get('retry-after');
+  if (raw != null && !Number.isNaN(Number(raw))) {
+    const n = Number(raw);
+    return n < 1000 ? n * 1000 : n; // seconds vs already-ms
+  }
+  const reset = get('x-ratelimit-reset-requests') || get('x-ratelimit-reset-tokens');
+  if (typeof reset === 'string' && /ms|s$/.test(reset)) {
+    const n = parseFloat(reset);
+    if (!Number.isNaN(n)) return /ms$/.test(reset) ? n : n * 1000;
+  }
+  return 1000; // sensible default when the provider gives no hint
+}
+
+function groqRequest(messages, tools, which, maxTokens = DEFAULT_MAX_TOKENS) {
   const cfg = which === 2 ? config.groq2 : config.groq;
   return () =>
     getGroq(which).chat.completions.create({
       model: cfg.model,
       messages,
       temperature: 0.4,
-      max_tokens: 800,
+      max_tokens: maxTokens,
       ...(tools && tools.length ? { tools, tool_choice: 'auto' } : {}),
     });
 }
 
-async function callChatCompletion(messages, tools) {
+async function callChatCompletion(messages, tools, maxTokens = DEFAULT_MAX_TOKENS) {
   const providers = [];
 
   if (config.groq.apiKey && Date.now() >= cooldowns.groq1) {
-    providers.push({ name: 'groq', run: groqRequest(messages, tools, 1), key: 'groq1' });
+    providers.push({ name: 'groq', run: groqRequest(messages, tools, 1, maxTokens), key: 'groq1' });
   }
 
   if (config.groq2.apiKey && Date.now() >= cooldowns.groq2) {
-    providers.push({ name: 'groq-2', run: groqRequest(messages, tools, 2), key: 'groq2' });
+    providers.push({ name: 'groq-2', run: groqRequest(messages, tools, 2, maxTokens), key: 'groq2' });
   }
 
   if (config.openrouter.apiKey && Date.now() >= cooldowns.openrouter) {
@@ -59,10 +92,10 @@ async function callChatCompletion(messages, tools) {
             model: config.openrouter.model,
             messages,
             temperature: 0.4,
-            max_tokens: 800,
+            max_tokens: maxTokens,
             ...(tools && tools.length ? { tools, tool_choice: 'auto' } : {}),
           }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(FALLBACK_TIMEOUT_MS),
         }).then(async (res) => {
           const data = await res.json();
           if (!res.ok || data.error) {
@@ -75,26 +108,41 @@ async function callChatCompletion(messages, tools) {
 
   // If everything is in cooldown, still try Groq primary as last resort
   if (providers.length === 0 && config.groq.apiKey) {
-    providers.push({ name: 'groq', run: groqRequest(messages, tools, 1), key: 'groq1' });
+    providers.push({ name: 'groq', run: groqRequest(messages, tools, 1, maxTokens), key: 'groq1' });
   }
 
   let lastErr;
   for (const provider of providers) {
-    try {
-      const result = await provider.run();
-      cooldowns[provider.key] = 0; // recovered
-      console.log(`[LLM] Served by ${provider.name}`);
-      return { result, provider: provider.name };
-    } catch (err) {
-      lastErr = err;
-      const status = err?.status || err?.response?.status;
-      const rateLimited = status === 429 || /rate limit/i.test(err.message || '');
-      // "User not found." = the API key is invalid/revoked — a config problem,
-      // not transient. Cooldown hard so we fail fast to the next provider.
-      const badKey = /user not found|invalid api key|authentication/i.test(err.message || '');
-      // Put this provider in cooldown so subsequent calls skip straight to the next one
-      cooldowns[provider.key] = Date.now() + (badKey ? 30 * 60_000 : rateLimited ? 60_000 : 30_000);
-      console.warn(`[LLM] ${provider.name} failed (${err.message})${badKey ? ' — invalid/revoked API key, check provider config!' : ''}, trying next provider…`);
+    // A provider may be retried once in-place when it rate-limits briefly.
+    // Falling straight through to a different provider (especially the free
+    // OpenRouter model) is what turns a 429 into a ~19 s reply; waiting
+    // <= MAX_RETRY_WAIT_MS keeps the fast provider and the fast response.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await provider.run();
+        cooldowns[provider.key] = 0; // recovered
+        console.log(`[LLM] Served by ${provider.name}`);
+        return { result, provider: provider.name };
+      } catch (err) {
+        lastErr = err;
+        const status = err?.status || err?.response?.status || err?.statusCode;
+        const rateLimited = status === 429 || /rate limit|too many requests/i.test(err.message || '');
+        // "User not found." = invalid/revoked key — a config problem, not
+        // transient. Cooldown hard so we fail fast to the next provider.
+        const badKey = /user not found|invalid api key|authentication/i.test(err.message || '');
+
+        const waitMs = retryAfterMs(err);
+        if (rateLimited && !badKey && attempt === 0 && waitMs <= MAX_RETRY_WAIT_MS) {
+          console.warn(`[LLM] ${provider.name} rate-limited, retrying in ${waitMs} ms…`);
+          await sleep(waitMs);
+          continue; // same provider, one quick retry
+        }
+
+        // Put this provider in cooldown so subsequent calls skip it
+        cooldowns[provider.key] = Date.now() + (badKey ? 30 * 60_000 : rateLimited ? 60_000 : 30_000);
+        console.warn(`[LLM] ${provider.name} failed (${err.message})${badKey ? ' — invalid/revoked API key, check provider config!' : ''}, trying next provider…`);
+        break; // move on to the next provider
+      }
     }
   }
   throw lastErr || new Error('No LLM provider available');
@@ -108,10 +156,11 @@ async function callChatCompletion(messages, tools) {
  * @param {string} channel - 'web' | 'whatsapp' | 'messenger' | 'instagram'
  */
 function buildSystemPrompt(org, settings, contextChunks, channel = 'web') {
-  // Token budget: Groq free tier allows ~8,000 tokens/min. Chunks are ranked
-  // by similarity, so keep taking them until the character budget (~4 chars
-  // per token) is exhausted — big crawled KBs otherwise blow the limit (413).
-  const MAX_CONTEXT_CHARS = parseInt(process.env.MAX_CONTEXT_CHARS || '12000', 10) || 12000;
+  // Token budget: Groq free tier throttles on tokens/minute, and prompt size is
+  // the biggest lever on how fast the first token arrives. Chunks are ranked by
+  // similarity, so keep taking them until the character budget (~4 chars per
+  // token) is exhausted — big crawled KBs otherwise blow the limit (413).
+  const MAX_CONTEXT_CHARS = parseInt(process.env.MAX_CONTEXT_CHARS || '6000', 10) || 6000;
   const parts = [];
   let used = 0;
   for (const c of contextChunks) {
@@ -228,14 +277,19 @@ function getToolSchemas() {
 /**
  * Run one chat turn against the LLM (with automatic provider fallback)
  * and tool support. Returns { reply, toolCallsExecuted, provider }
+ *
+ * maxToolRounds caps how many times the model may call tools before it must
+ * answer. Each extra round is another full LLM call (~250-600 ms), so this is
+ * kept at 2: enough for the real flows (check_availability → create_booking,
+ * or save-lead → confirm) without letting a confused model spin.
  */
-async function runChatTurn({ messages, tools, executeTool, maxToolRounds = 3 }) {
+async function runChatTurn({ messages, tools, executeTool, maxToolRounds = 2, maxTokens = DEFAULT_MAX_TOKENS }) {
   let convo = [...messages];
   const executedTools = [];
   let usedProvider = 'unknown';
 
   for (let round = 0; round <= maxToolRounds; round++) {
-    const { result: completion, provider } = await callChatCompletion(convo, tools);
+    const { result: completion, provider } = await callChatCompletion(convo, tools, maxTokens);
     usedProvider = provider;
 
     const msg = completion.choices?.[0]?.message;

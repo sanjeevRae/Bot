@@ -6,6 +6,9 @@ const { sendWhatsApp, sendMessenger } = require('../services/channels');
 
 const router = express.Router();
 
+/** Prior messages replayed to the model (see routes/chat.js for the rationale). */
+const HISTORY_TURNS = parseInt(process.env.CHAT_HISTORY_TURNS || '4', 10);
+
 /**
  * Resolve which tenant org a message belongs to.
  * WhatsApp: by phone_number_id stored in settings.whatsapp_phone_number_id
@@ -85,7 +88,11 @@ router.post('/webhook', async (req, res) => {
 
           const sessionId = `${channel}_${msg.from}`;
 
-          await saveTurn(orgId, sessionId, 'user', msg.text.body, channel);
+          // Don't block the reply on history bookkeeping — the pipeline only
+          // needs prior turns, and this turn's message is passed explicitly.
+          saveTurn(orgId, sessionId, 'user', msg.text.body, channel).catch((e) =>
+            console.error('saveTurn (user) failed:', e.message)
+          );
 
           // Run the same chat pipeline as the web widget
           const reply = await runChatForChannel(orgId, sessionId, msg.text.body, channel);
@@ -110,37 +117,36 @@ async function runChatForChannel(orgId, sessionId, message, channel) {
   const { retrieveContext, trackUsage } = require('../services/rag');
   const { buildSystemPrompt, getToolSchemas, runChatTurn } = require('../services/groq');
   const { createToolExecutor } = require('../services/tools');
+  const { getOrgContext } = require('../services/orgCache');
+  const { messageQuotaFor, countMessages, usageResult, quotaExceededMessage } = require('../services/quotas');
 
-  const [{ data: org }, { data: settings }] = await Promise.all([
-    supabaseAdmin.from('organizations').select('id, name, industry').eq('id', orgId).single(),
-    supabaseAdmin.from('settings').select('*').eq('organization_id', orgId).maybeSingle(),
+  // One parallel wave (same reasoning as routes/chat.js): org+settings come from
+  // the short-lived cache, and the two usage counts are fetched together so the
+  // plan can pick whichever period applies without a second round-trip.
+  const [ctx, historyRes, contextChunks, usedLifetime, usedThisMonth] = await Promise.all([
+    getOrgContext(orgId),
+    supabaseAdmin
+      .from('chat_history')
+      .select('role, message')
+      .eq('organization_id', orgId)
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: false })
+      .limit(HISTORY_TURNS),
+    retrieveContext(orgId, message),
+    countMessages(orgId, 'lifetime'),
+    countMessages(orgId, 'month'),
   ]);
-  if (!org) return 'Sorry, this business is unavailable.';
+
+  if (!ctx) return 'Sorry, this business is unavailable.';
+  const { org, settings } = ctx;
 
   // Quota check — free (and expired) plans have a one-time lifetime allowance,
-  // paid plans a monthly one. Note this reads the per-org override from
-  // `organizations` (where it lives), not `settings`.
-  const { messageUsageFor, quotaExceededMessage } = require('../services/quotas');
-  const { data: orgPlan } = await supabaseAdmin
-    .from('organizations')
-    .select('monthly_message_quota, plan, plan_expires_at')
-    .eq('id', orgId)
-    .single();
+  // paid plans a monthly one. The per-org override lives on `organizations`.
+  const quota = messageQuotaFor(org);
+  const usage = usageResult(quota, quota.period === 'month' ? usedThisMonth : usedLifetime);
+  if (usage.exceeded) return quotaExceededMessage(usage.period);
 
-  const quota = await messageUsageFor({ id: orgId, ...(orgPlan || {}) });
-  if (quota.exceeded) return quotaExceededMessage(quota.period);
-
-  const contextChunks = await retrieveContext(orgId, message);
-
-  const { data: history } = await supabaseAdmin
-    .from('chat_history')
-    .select('role, message')
-    .eq('organization_id', orgId)
-    .eq('session_id', sessionId)
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  const priorMessages = (history || []).reverse().map((h) => ({ role: h.role, content: h.message }));
+  const priorMessages = (historyRes.data || []).reverse().map((h) => ({ role: h.role, content: h.message }));
 
   const result = await runChatTurn({
     messages: [
@@ -150,9 +156,14 @@ async function runChatForChannel(orgId, sessionId, message, channel) {
     ],
     tools: getToolSchemas(),
     executeTool: createToolExecutor(orgId, org, settings, { sessionId }),
+    // WhatsApp/Messenger render plain text and the prompt asks for <150 words,
+    // so a tighter cap means the visitor waits less for the same answer.
+    maxTokens: parseInt(process.env.LLM_MAX_TOKENS_CHANNEL || '450', 10),
   });
 
-  await trackUsage(orgId, 'message');
+  // Off the critical path: the visitor should not wait on usage bookkeeping
+  // before the reply is sent back to WhatsApp / Messenger.
+  trackUsage(orgId, 'message').catch((e) => console.error('trackUsage failed:', e.message));
   return result.reply;
 }
 

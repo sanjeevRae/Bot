@@ -71,20 +71,34 @@ function messageQuotaFor(org, now = new Date()) {
  * @param {{id:string}} org - needs at least `id`, plus plan columns for paid orgs
  */
 async function messageUsageFor(org, now = new Date()) {
-  const { limit, period, plan, planActive } = messageQuotaFor(org, now);
+  const quota = messageQuotaFor(org, now);
+  const used = await countMessages(org.id, quota.period, now);
+  return usageResult(quota, used);
+}
 
+/**
+ * Count message usage for one period.
+ * Lifetime = every message ever; month = the current calendar month only.
+ * Exposed separately so callers can fetch both counts in a single parallel
+ * wave and then pick the one the plan needs (no extra round-trip on the
+ * critical path of a chat message).
+ */
+async function countMessages(orgId, period = 'lifetime', now = new Date()) {
   let query = supabaseAdmin
     .from('usage_events')
     .select('id', { count: 'exact', head: true })
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .eq('event_type', 'message');
 
   if (period === 'month') query = query.gte('created_at', startOfMonth(now).toISOString());
 
   const { count, error } = await query;
   if (error) throw error;
+  return count || 0;
+}
 
-  const used = count || 0;
+/** Shape the quota + a known usage count into the response object routes use. */
+function usageResult({ limit, period, plan, planActive }, used) {
   return {
     used,
     limit,
@@ -108,5 +122,7 @@ module.exports = {
   isPlanActive,
   messageQuotaFor,
   messageUsageFor,
+  countMessages,
+  usageResult,
   quotaExceededMessage,
 };

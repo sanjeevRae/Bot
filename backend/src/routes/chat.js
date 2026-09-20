@@ -3,10 +3,18 @@ const supabaseAdmin = require('../lib/supabase');
 const { retrieveContext, trackUsage } = require('../services/rag');
 const { buildSystemPrompt, getToolSchemas, runChatTurn } = require('../services/groq');
 const { createToolExecutor } = require('../services/tools');
-const { messageUsageFor, quotaExceededMessage } = require('../services/quotas');
+const { messageQuotaFor, countMessages, usageResult, quotaExceededMessage } = require('../services/quotas');
+const { getOrgContext } = require('../services/orgCache');
 const { issueSession, verifySession } = require('../lib/sessionToken');
 
 const router = express.Router();
+
+/**
+ * How many prior messages to replay to the model. Each one is input tokens the
+ * model must read before answering, so this trades a little continuity for
+ * latency (6 ≈ three back-and-forth exchanges, plenty for booking flows).
+ */
+const HISTORY_TURNS = parseInt(process.env.CHAT_HISTORY_TURNS || '4', 10);
 
 /**
  * POST /api/chat/session
@@ -60,53 +68,43 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Load org + settings (public info only)
-    const { data: org, error: orgErr } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name, industry')
-      .eq('id', orgId)
-      .single();
-    if (orgErr || !org) return res.status(404).json({ error: 'Business not found' });
+    // ---- Everything the turn needs, in ONE parallel wave ------------------
+    // Previously these were 7 sequential awaits (~340 ms each against a remote
+    // Supabase), so a reply could not start before ~2.4 s. They are independent,
+    // so they run together now: wall time is the slowest single call, not the sum.
+    // Both usage counts are fetched (lifetime + this month) because which one
+    // applies depends on the plan, which is only known once the org resolves.
+    const [ctx, historyRes, contextChunks, usedLifetime, usedThisMonth] = await Promise.all([
+      getOrgContext(orgId),
+      supabaseAdmin
+        .from('chat_history')
+        .select('role, message')
+        .eq('organization_id', orgId)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(HISTORY_TURNS),
+      retrieveContext(orgId, message),
+      countMessages(orgId, 'lifetime'),
+      countMessages(orgId, 'month'),
+    ]);
 
-    const { data: settings } = await supabaseAdmin
-      .from('settings')
-      .select('*')
-      .eq('organization_id', orgId)
-      .maybeSingle();
+    if (!ctx) return res.status(404).json({ error: 'Business not found' });
+    const { org, settings } = ctx;
 
-    // ---- Free-tier quota check ----
-    // Free (and expired) plans get a one-time lifetime allowance; paid plans get
-    // a monthly one. See services/quotas.js for how each period is counted.
-    const { data: orgPlan } = await supabaseAdmin
-      .from('organizations')
-      .select('monthly_message_quota, plan, plan_expires_at')
-      .eq('id', orgId)
-      .single();
+    // ---- Quota check (free = one-time allowance, paid = monthly) ----
+    const quota = messageQuotaFor(org);
+    const usage = usageResult(quota, quota.period === 'month' ? usedThisMonth : usedLifetime);
 
-    const quota = await messageUsageFor({ id: orgId, ...(orgPlan || {}) });
-
-    if (quota.exceeded) {
+    if (usage.exceeded) {
       return res.status(429).json({
-        error: quotaExceededMessage(quota.period),
+        error: quotaExceededMessage(usage.period),
         quota_exceeded: true,
-        limit: quota.limit,
-        period: quota.period,
+        limit: usage.limit,
+        period: usage.period,
       });
     }
 
-    // ---- RAG retrieval ----
-    const contextChunks = await retrieveContext(orgId, message);
-
-    // ---- Conversation history (last 10 turns) ----
-    const { data: history } = await supabaseAdmin
-      .from('chat_history')
-      .select('role, message')
-      .eq('organization_id', orgId)
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    const priorMessages = (history || []).reverse().map((h) => ({
+    const priorMessages = (historyRes.data || []).reverse().map((h) => ({
       role: h.role,
       content: h.message,
     }));
@@ -126,26 +124,31 @@ router.post('/', async (req, res) => {
         messages,
         tools: getToolSchemas(),
         executeTool,
+        maxTokens: parseInt(process.env.LLM_MAX_TOKENS_WEB || '600', 10),
       });
     } catch (llmErr) {
       console.error('Groq error:', llmErr.message);
       return res.status(502).json({ error: 'AI service temporarily unavailable. Please try again.' });
     }
 
-    // ---- Persist history ----
-    await supabaseAdmin.from('chat_history').insert([
-      { organization_id: orgId, session_id: sessionId, role: 'user', message, channel },
-      { organization_id: orgId, session_id: sessionId, role: 'assistant', message: result.reply, channel },
-    ]);
-
-    await trackUsage(orgId, 'message');
-
+    // ---- Respond first, persist after ---------------------------------------
+    // History + usage inserts are two more Supabase round-trips (~340 ms each).
+    // The visitor doesn't need them to read the reply, so they run after the
+    // response is flushed. A failure here is logged, never surfaced.
     res.json({
       reply: result.reply,
       actions: result.toolCallsExecuted,
       sources: contextChunks.map((c) => c.id),
       provider: result.provider,
     });
+
+    void Promise.all([
+      supabaseAdmin.from('chat_history').insert([
+        { organization_id: orgId, session_id: sessionId, role: 'user', message, channel },
+        { organization_id: orgId, session_id: sessionId, role: 'assistant', message: result.reply, channel },
+      ]),
+      trackUsage(orgId, 'message'),
+    ]).catch((e) => console.error('Post-reply persistence failed:', e.message));
   } catch (err) {
     console.error('Chat route error:', err);
     res.status(500).json({ error: 'Internal server error' });
