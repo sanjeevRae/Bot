@@ -1,6 +1,7 @@
 ﻿import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import DemoWidget from '../components/DemoWidget';
+import Reveal from '../components/Reveal';
 import { PLANS, planPrice, ANNUAL_DISCOUNT } from '../lib/plans';
 
 /* Feature glyphs — the exact artwork supplied for this section: leaf, sparkle,
@@ -42,6 +43,67 @@ const FEATURES = [
   { icon: FeatureIcons.star, title: 'Installs anywhere', text: 'One script tag for any website, WordPress plugin, or QR code link.' },
 ];
 
+/* Testimonials — shown one at a time in the carousel with < > arrows. */
+const TESTIMONIALS = [
+  {
+    quote:
+      'Chitra feels like an extra team member who never takes a break. It handles inquiries, collects lead details, and keeps our customers engaged around the clock.',
+    name: 'Anjali Mehta',
+    role: 'Owner, Bloom Salon & Spa',
+    img: 32,
+  },
+  {
+    quote:
+      'We used to spend hours answering the same customer questions. Chitra now handles them instantly, helping us save time and focus on growing our business',
+    name: 'Bikash Shrestha',
+    role: 'Manager, Himalayan Kitchen & Bar',
+    img: 11,
+  },
+  {
+    quote:
+      'I pasted our fee schedule once and the bot answers parents before they even call. It captured 120+ leads for our centre in two months.',
+    name: 'Sunita Karki',
+    role: 'Director, Everest Academy',
+    img: 47,
+  },
+];
+
+/* FAQ — Chitra-specific questions, one row each; clicking expands the answer. */
+const FAQS = [
+  {
+    q: 'What is Chitra AI?',
+    a: 'Chitra is an AI assistant trained on your own content — website, menus, price lists, PDFs. It answers customer questions 24/7, captures leads and books appointments on your website, WhatsApp, Messenger and Instagram.',
+  },
+  {
+    q: 'How long does setup take?',
+    a: 'About 15 minutes. Paste your website URL or upload your documents, we build the knowledge base automatically, then you install it with one script tag, the WordPress plugin, or a QR code link — no developer needed.',
+  },
+  {
+    q: 'What does the Free plan include?',
+    a: '100 messages as a one-time allowance (it does not reset monthly), 5 knowledge documents, 50 bookings per month, plus the website widget and QR link — enough to see real value before paying anything.',
+  },
+  {
+    q: 'How does billing work?',
+    a: 'Pay per month — Pro is Rs. 1,500/mo and Agency Rs. 4,500/mo, and each payment activates your plan for 30 days. Choose the annual toggle and you pay once a year at 40% off (Pro Rs. 10,800/yr, Agency Rs. 32,400/yr).',
+  },
+  {
+    q: 'Which channels does it work on?',
+    a: 'Website widget, a shareable QR/direct link, WhatsApp (Cloud API or your own self-hosted gateway), Facebook Messenger and Instagram DMs — all answered by the same trained bot from one dashboard.',
+  },
+  {
+    q: 'What happens if the bot doesn\'t know an answer?',
+    a: 'It says so honestly instead of guessing, then either collects the visitor\'s contact details as a lead or escalates to a human — you get an email notification with the full conversation so your team can follow up.',
+  },
+  {
+    q: 'Can I remove the Chitra branding?',
+    a: 'Yes — Pro and Agency include white-labelling: your logo, your colours, your bot name, no mention of Chitra. Your customers only ever see your brand.',
+  },
+  {
+    q: 'Does it understand Nepali?',
+    a: 'Yes. It replies in whichever language the customer writes in — Nepali, English or Romanised Nepali — using the knowledge you upload, in the tone you set.',
+  },
+];
+
 /* Reusable section header. Centred by default; pass align="left" for a left-aligned block. */
 function SectionHeader({ eyebrow, title, text, dark = false, eyebrowClassName = '', align = 'center' }) {
   // An explicit colour wins over the dark-section default, so the two never fight
@@ -74,6 +136,10 @@ export default function Home() {
   const [activeFeature, setActiveFeature] = useState(null);
   // Billing cycle for the pricing section: monthly (default) or yearly.
   const [annual, setAnnual] = useState(false);
+  // Which testimonial the carousel shows; the arrows wrap around.
+  const [testimonialIdx, setTestimonialIdx] = useState(0);
+  // Which FAQ row is expanded (index), or null when all are closed.
+  const [openFaq, setOpenFaq] = useState(null);
   // Measured x/width of each feature column, so the indicator can slide between them.
   const featureGridRef = useRef(null);
   const featureTrackRef = useRef(null);
@@ -192,12 +258,12 @@ export default function Home() {
       {/* Who it's for */}
       <section className="mx-auto max-w-6xl px-5 pt-24 pb-16 sm:px-6 sm:pt-32 lg:pt-36">
         <div className="grid gap-12 md:grid-cols-2 md:gap-16">
-          <div>
+          <Reveal>
             <h2 className="h-display max-w-[7em] font-suisse text-[22px] font-medium leading-[1.1] tracking-[-0.01em] sm:text-[40px] lg:text-[48px]">
               Who Chitra AI is best for.
             </h2>
-          </div>
-          <ul className="space-y-[27px]">
+          </Reveal>
+          <Reveal as="ul" delay={90} className="space-y-[27px]">
             {[
               {
                 markerPath: 'M12 0L24 12L12 24L0 12L12 0Z',
@@ -245,7 +311,7 @@ export default function Home() {
                 </p>
               </li>
             ))}
-          </ul>
+          </Reveal>
         </div>
       </section>
 
@@ -255,16 +321,18 @@ export default function Home() {
 
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl px-5 sm:px-6">
-        <h2 className="h-display mb-19 max-w-[14em] font-suisse text-[24px] font-medium leading-[1.12] tracking-[-0.02em] sm:mb-16 sm:text-[30px] lg:mb-[74px] lg:text-[34px]">
-          Everything your business needs
-        </h2>
+        <Reveal>
+          <h2 className="h-display mb-19 max-w-[14em] font-suisse text-[24px] font-medium leading-[1.12] tracking-[-0.02em] sm:mb-16 sm:text-[30px] lg:mb-[74px] lg:text-[34px]">
+            Everything your business needs
+          </h2>
+        </Reveal>
         <div
           ref={featureGridRef}
           className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-4"
           onMouseLeave={() => setActiveFeature(null)}
         >
-          {FEATURES.map((f) => (
-            <div key={f.title} onMouseEnter={() => setActiveFeature(f.title)}>
+          {FEATURES.map((f, i) => (
+            <Reveal key={f.title} delay={i * 70} onMouseEnter={() => setActiveFeature(f.title)}>
               {/* Mark turns a half turn left-to-right and holds a few px higher while the
                   card is hovered, then eases back to rest on leave. The perspective lives
                   on the row, so the turn reads in 3D instead of just flattening. */}
@@ -279,7 +347,7 @@ export default function Home() {
               </div>
               <h3 className="mb-0.5 text-[17px] font-medium text-ink-900">{f.title}</h3>
               <p className="pb-10 text-[15.5px] leading-[1.5] text-ink-500">{f.text}</p>
-            </div>
+            </Reveal>
           ))}
         </div>
 
@@ -312,48 +380,56 @@ export default function Home() {
       {/* How it works */}
       <section id="how" className="border-y border-gray-200 bg-white px-5 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-6xl">
-          <SectionHeader
-            eyebrow="Get started"
-            eyebrowClassName="!text-ink-900"
-            title="Live in 3 minutes"
-          />
+          <Reveal>
+            <SectionHeader
+              eyebrow="Get started"
+              eyebrowClassName="!text-ink-900"
+              title="Live in 3 minutes"
+            />
+          </Reveal>
           <div className="grid gap-4 md:grid-cols-3 md:gap-6">
             {[
               ['1', 'Sign up & describe your business', 'Create a free account and tell us your industry — restaurant, salon, clinic or anything else.'],
               ['2', 'Teach it your business', 'Crawl your website, upload a PDF menu, or paste FAQs. Chitra builds its own knowledge base in seconds.'],
               ['3', 'Copy one line to your website', 'Paste a single script tag or share your QR link. Your assistant starts working immediately.'],
-            ].map(([n, title, text]) => (
-              <div key={n} className="card p-6 sm:p-7">
-                <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-sm font-semibold text-white">
-                  {n}
+            ].map(([n, title, text], i) => (
+              <Reveal key={n} delay={i * 80}>
+                {/* Scale lives on the card itself: Reveal owns the fly-up transform
+                    on the wrapper, so the two never fight over one `transform`. */}
+                <div className="card h-full p-6 transition-transform duration-300 ease-out hover:scale-[1.03] motion-reduce:hover:scale-100 sm:p-7">
+                  <div className="mb-4 flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-sm font-semibold text-white">
+                    {n}
+                  </div>
+                  <h3 className="mb-2 text-[16px] font-semibold text-ink-900">{title}</h3>
+                  <p className="text-sm leading-relaxed text-ink-500">{text}</p>
                 </div>
-                <h3 className="mb-2 text-[16px] font-semibold text-ink-900">{title}</h3>
-                <p className="text-sm leading-relaxed text-ink-500">{text}</p>
-              </div>
+              </Reveal>
             ))}
           </div>
-          <div className="mt-10 text-center">
+          <Reveal delay={180} className="mt-10 text-center">
             <Link
               href="/signup"
               className="btn-primary relative isolate overflow-hidden bg-transparent px-7 py-3 before:absolute before:inset-0 before:-z-10 before:bg-ink-900 after:absolute after:inset-0 after:-z-10 after:bg-gray-600 after:opacity-0 after:transition-opacity after:duration-300 after:ease-out hover:after:opacity-100 focus-visible:ring-ink-900"
             >
               Start now — it&apos;s free
             </Link>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* Feature showcase */}
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
-        <SectionHeader
-          eyebrow="Features"
-          eyebrowClassName="!text-ink-900"
-          title="Your business, on autopilot"
-          text="Chitra learns your business once and works 24/7 — answering questions, capturing leads, booking appointments."
-        />
+        <Reveal>
+          <SectionHeader
+            eyebrow="Features"
+            eyebrowClassName="!text-ink-900"
+            title="Your business, on autopilot"
+            text="Chitra learns your business once and works 24/7 — answering questions, capturing leads, booking appointments."
+          />
+        </Reveal>
 
         {/* Panel 1 — chat mock */}
-        <div className="card mb-6 grid overflow-hidden md:grid-cols-2">
+        <Reveal className="card mb-6 grid overflow-hidden md:grid-cols-2">
           <div className="flex flex-col justify-center p-7 sm:p-10">
             <h3 className="h-display mb-3 text-2xl sm:text-3xl">
               A chatbot that actually knows you
@@ -395,12 +471,12 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
+        </Reveal>
 
         {/* Panels 2 & 3 */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Bookings */}
-          <div className="card overflow-hidden">
+          <Reveal className="card overflow-hidden">
             <div className="p-7 sm:p-8">
               <h3 className="h-display mb-2 text-xl sm:text-2xl">Smart bookings</h3>
               <p className="text-sm leading-relaxed text-ink-500">
@@ -438,10 +514,10 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </div>
+          </Reveal>
 
           {/* Leads */}
-          <div className="card overflow-hidden">
+          <Reveal delay={90} className="card overflow-hidden">
             <div className="p-7 sm:p-8">
               <h3 className="h-display mb-2 text-xl sm:text-2xl">Never lose a lead</h3>
               <p className="text-sm leading-relaxed text-ink-500">
@@ -473,21 +549,23 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </div>
+          </Reveal>
         </div>
       </section>
 
       {/* Integrations */}
       <section id="integrations" className="bg-ink-900 px-5 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-6xl">
-          <SectionHeader
-            dark
-            eyebrow="Integrations"
-            eyebrowClassName="!text-white"
-            title="Don't replace. Integrate."
-            text="Chitra fits into the tools you already use — no migration, no learning curve. Connect in one click."
-          />
-          <div className="space-y-3 sm:space-y-4">
+          <Reveal>
+            <SectionHeader
+              dark
+              eyebrow="Integrations"
+              eyebrowClassName="!text-white"
+              title="Don't replace. Integrate."
+              text="Chitra fits into the tools you already use — no migration, no learning curve. Connect in one click."
+            />
+          </Reveal>
+          <Reveal delay={90} className="space-y-3 sm:space-y-4">
             {[
               ['whatsapp', 'notion', 'trello', 'stripe', 'gmail', 'googledrive', 'calcom', 'zapier'],
               ['asana', 'mailchimp', 'hubspot', 'zoho', 'googlemeet', 'clickup', 'shopify', 'discord'],
@@ -509,7 +587,7 @@ export default function Home() {
                 ))}
               </div>
             ))}
-          </div>
+          </Reveal>
           <div className="mt-10 text-center">
             <Link href="/signup" className="btn-link !text-white hover:!text-white">
               All integrations <span aria-hidden>→</span>
@@ -521,15 +599,17 @@ export default function Home() {
       {/* Pricing */}
       <section id="pricing" className="bg-gray-50 px-5 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-6xl">
-          <SectionHeader
-            eyebrow="Pricing"
-            eyebrowClassName="!text-ink-900"
-            align="left"
-            title="Choose your package."
-          />
+          <Reveal>
+            <SectionHeader
+              eyebrow="Pricing"
+              eyebrowClassName="!text-ink-900"
+              align="left"
+              title="Choose your package."
+            />
+          </Reveal>
 
           {/* Billing-cycle toggle — a black/white take on the reference pill. */}
-          <div className="mb-8 flex flex-wrap items-center gap-4">
+          <Reveal delay={90} className="mb-8 flex flex-wrap items-center gap-4">
             <span className="text-[15px] text-ink-500">
               Annually (save {Math.round(ANNUAL_DISCOUNT * 100)}%)
             </span>
@@ -563,16 +643,17 @@ export default function Home() {
                 </button>
               ))}
             </div>
-          </div>
+          </Reveal>
 
           <div className="grid gap-5 md:grid-cols-3">
-            {PLANS.map((p) => {
+            {PLANS.map((p, i) => {
               // The top tier is inverted, the way the reference sets its enterprise card apart.
               const dark = p.id === 'agency';
               const { price, per, period } = planPrice(p, annual);
               return (
-                <div
+                <Reveal
                   key={p.id}
+                  delay={i * 80}
                   className={`flex flex-col rounded-2xl border p-8 ${
                     dark ? 'border-transparent bg-ink-900' : 'border-gray-200 bg-white'
                   }`}
@@ -630,26 +711,114 @@ export default function Home() {
                   <p className={`mt-auto pt-8 text-[15px] leading-[1.6] ${dark ? 'text-gray-400' : 'text-ink-500'}`}>
                     {p.description}
                   </p>
-                </div>
+                </Reveal>
               );
             })}
           </div>
         </div>
       </section>
 
-      {/* Testimonial */}
-      <section className="mx-auto max-w-3xl px-5 py-16 text-center sm:px-6 sm:py-24">
-        <blockquote className="h-display mx-auto mb-8 max-w-2xl text-2xl leading-snug sm:text-3xl">
-          Chitra answers our customers while we sleep. It booked 40+ appointments
-          in the first month alone — and we didn&apos;t hire anyone.
-        </blockquote>
-        <img
-          src="https://i.pravatar.cc/96?img=32"
-          alt="Anjali Mehta"
-          className="mx-auto mb-3 h-12 w-12 rounded-full object-cover ring-2 ring-gray-200"
-        />
-        <p className="text-sm font-semibold text-ink-900">Anjali Mehta</p>
-        <p className="text-xs text-ink-400">Owner, Bloom Salon &amp; Spa</p>
+      {/* Testimonials — one at a time, < > arrows on the sides (wrap around) */}
+      <section className="mx-auto max-w-4xl px-5 py-16 sm:px-6 sm:py-24">
+        <Reveal className="flex items-center gap-3 sm:gap-6">
+          <button
+            type="button"
+            aria-label="Previous testimonial"
+            onClick={() => setTestimonialIdx((i) => (i - 1 + TESTIMONIALS.length) % TESTIMONIALS.length)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-ink-900 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+          </button>
+
+          {/* Keyed on the index so each swap replays the fade-slide. */}
+          <div key={testimonialIdx} className="animate-fade-slide min-w-0 flex-1 text-center">
+            <blockquote className="h-display mx-auto mb-8 max-w-3xl text-2xl leading-snug sm:text-3xl">
+              {TESTIMONIALS[testimonialIdx].quote}
+            </blockquote>
+            <img
+              src={`https://i.pravatar.cc/96?img=${TESTIMONIALS[testimonialIdx].img}`}
+              alt={TESTIMONIALS[testimonialIdx].name}
+              className="mx-auto mb-3 h-12 w-12 rounded-full object-cover ring-2 ring-gray-200"
+            />
+            <p className="text-sm font-semibold text-ink-900">{TESTIMONIALS[testimonialIdx].name}</p>
+            <p className="text-xs text-ink-400">{TESTIMONIALS[testimonialIdx].role}</p>
+          </div>
+
+          <button
+            type="button"
+            aria-label="Next testimonial"
+            onClick={() => setTestimonialIdx((i) => (i + 1) % TESTIMONIALS.length)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-ink-900 transition-colors duration-150 hover:border-gray-400 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
+        </Reveal>
+      </section>
+
+<div aria-hidden="true" className="mx-auto max-w-6xl px-5 py-16 sm:px-6 sm:py-24">
+        <div className="h-px w-full bg-gray-200" />
+      </div>
+
+      {/* FAQ — heading left, accordion right (one row open at a time) */}
+      <section id="faq" className="bg-white-50 px-5 py-16 sm:px-6 sm:py-24">
+        <div className="mx-auto grid max-w-6xl gap-10 md:grid-cols-5 md:gap-14">
+          <Reveal className="md:col-span-2">
+            <h2 className="h-display max-w-[9em] text-4xl leading-[1.05] tracking-[-0.02em] text-ink-900 sm:text-5xl md:sticky md:top-24">
+              Frequently asked questions.
+            </h2>
+          </Reveal>
+
+          <Reveal delay={90} className="md:col-span-3">
+            {FAQS.map((item, i) => {
+              const open = openFaq === i;
+              return (
+                <div key={item.q} className="border-b border-gray-200 first:border-t-0 last:border-b-0">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={`faq-panel-${i}`}
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    className="flex w-full items-center justify-between gap-6 py-6 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2"
+                  >
+                    <span className={`text-[16px] font-medium transition-colors duration-150 ${open ? 'text-ink-900' : 'text-ink-900/80 hover:text-ink-900'}`}>
+                      {item.q}
+                    </span>
+                    {/* The plus rotates into a cross when the row is open. */}
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                      className={`shrink-0 text-ink-900 transition-transform duration-300 ease-out ${open ? 'rotate-45' : ''}`}
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                  {/* Collapsible answer: animating grid-template-rows avoids
+                      measuring heights, and the inner div clips the content. */}
+                  <div
+                    id={`faq-panel-${i}`}
+                    className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                  >
+                    <div className="overflow-hidden">
+                      <p className="max-w-2xl pb-6 pr-8 text-[15px] leading-relaxed text-ink-500">
+                        {item.a}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </Reveal>
+        </div>
       </section>
 
       {/* Footer */}

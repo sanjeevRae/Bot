@@ -32,6 +32,16 @@ module.exports = {
         sm: '0 1px 2px rgba(17,24,39,0.05)',
         DEFAULT: '0 1px 3px rgba(17,24,39,0.08)',
       },
+      keyframes: {
+        // Testimonial carousel — each swap replays this on the keyed content block.
+        'fade-slide': {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-slide': 'fade-slide 0.35s ease-out',
+      },
     },
   },
   plugins: [],
