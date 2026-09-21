@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node tests/widget.e2e.js"
+    "test": "node tests/widget.e2e.js && node tests/knowledge.e2e.js"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -23,10 +23,13 @@
     "groq-sdk": "^0.7.0",
     "helmet": "^7.1.0",
     "jsdom": "^24.1.0",
+    "mammoth": "^1.12.3",
+    "officeparser": "^8.0.0",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.20.2",
     "uuid": "^9.0.1",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

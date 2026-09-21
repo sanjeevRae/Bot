@@ -12,6 +12,10 @@ const config = require('../config');
  *   POST /api/sessions/{sessionId}/webhooks            { url, events, secret }
  *   GET  /api/sessions, GET /api/sessions/{id}
  *   POST /api/sessions/{id}/start | /stop | /logout, GET /api/sessions/{id}/qr
+ *
+ * V11 additions: media delivery (sendImage/sendDocument/sendLocation), a
+ * media download helper for inbound voice notes/photos, and session-targeted
+ * helpers used by the handoff "owner reply" path.
  */
 
 function baseUrl() {
@@ -98,6 +102,76 @@ async function sendText(sessionId, chatId, text) {
   });
 }
 
+/**
+ * Send an image on a session (menu photo, receipt). `image` accepts a public
+ * URL ({ imageUrl }) or base64 ({ imageBase64 }) depending on the gateway
+ * build; caption is best-effort.
+ */
+async function sendImage(sessionId, chatId, imageUrl, caption) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-image`, {
+    method: 'POST',
+    body: {
+      chatId,
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(caption ? { caption: String(caption).slice(0, 1024) } : {}),
+    },
+  });
+}
+
+/** Send a document on a session (price-list PDF). */
+async function sendDocument(sessionId, chatId, documentUrl, caption) {
+  const filename = String(documentUrl || '').split('/').pop().split('?')[0].slice(0, 120) || 'document.pdf';
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-document`, {
+    method: 'POST',
+    body: {
+      chatId,
+      documentUrl,
+      filename,
+      ...(caption ? { caption: String(caption).slice(0, 1024) } : {}),
+    },
+  });
+}
+
+/** Send a location pin on a session (shop / delivery point). */
+async function sendLocation(sessionId, chatId, latitude, longitude, name) {
+  return request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-location`, {
+    method: 'POST',
+    body: {
+      chatId,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+      ...(name ? { name: String(name).slice(0, 200) } : {}),
+    },
+  });
+}
+
+/**
+ * Fetch inbound media bytes through the gateway (voice note → Buffer for
+ * Whisper, photo → Buffer for OCR). Returns null when the gateway build has
+ * no media endpoint — the caller then falls back to the one-line reply.
+ */
+async function downloadMedia(sessionId, messageId) {
+  if (!messageId) return null;
+  try {
+    const data = await request(
+      `/api/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(messageId)}/media`
+    );
+    // Gateway builds differ: base64 string, { data }, { base64 }, or a URL.
+    if (typeof data === 'string' && data.length > 100) return Buffer.from(data, 'base64');
+    const b64 = data && (data.base64 || data.data);
+    if (typeof b64 === 'string' && b64.length > 100) return Buffer.from(b64, 'base64');
+    if (data && data.url) {
+      const res = await fetch(data.url, { signal: AbortSignal.timeout(20000) });
+      if (!res.ok) return null;
+      return Buffer.from(await res.arrayBuffer());
+    }
+    return null;
+  } catch (err) {
+    console.warn('[openwa] media download failed:', err.message);
+    return null;
+  }
+}
+
 /** Register a webhook (or rely on an existing one). events defaults to message.received. */
 async function registerWebhook(sessionId, url, secret, events = ['message.received']) {
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/webhooks`, {
@@ -136,6 +210,10 @@ module.exports = {
   logoutSession,
   getQr,
   sendText,
+  sendImage,
+  sendDocument,
+  sendLocation,
+  downloadMedia,
   registerWebhook,
   listWebhooks,
   resolvePhone,

@@ -203,6 +203,8 @@ export default function Channels() {
             )}
           </div>
         ) : (
+
+
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-2 sm:flex-row">
               <input
@@ -219,7 +221,9 @@ export default function Channels() {
             </p>
           </div>
         )}
-
+        <p className="text-xs text-ink-400">
+            Optional</p>
+            
         {openwa?.connected && (
           <div className="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4">
             <p className="text-[13px] font-medium text-ink-700">Send a test message</p>

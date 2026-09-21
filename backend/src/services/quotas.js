@@ -117,6 +117,28 @@ function quotaExceededMessage(period) {
     : 'This business has reached its monthly message limit. Please try again later.';
 }
 
+/**
+ * Resolve this org's knowledge-document allowance.
+ * Same plan resolution as messages (services/quotas.js): free and expired plans
+ * get the free allowance, active paid plans get their plan's limit.
+ */
+async function documentLimit(orgId) {
+  const { data, error } = await supabaseAdmin
+    .from('organizations')
+    .select('plan, plan_expires_at')
+    .eq('id', orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Document limit lookup failed, using free allowance:', error.message);
+    return config.freeTierQuotas.documentsMax;
+  }
+  if (!isPlanActive(data)) return config.freeTierQuotas.documentsMax;
+
+  const plan = PLAN_QUOTAS[data.plan] || PLAN_QUOTAS.pro;
+  return plan.documentsMax ?? config.freeTierQuotas.documentsMax;
+}
+
 module.exports = {
   startOfMonth,
   isPlanActive,
@@ -125,4 +147,5 @@ module.exports = {
   countMessages,
   usageResult,
   quotaExceededMessage,
+  documentLimit,
 };

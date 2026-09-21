@@ -20,6 +20,8 @@ app.use(helmet());
 // The OpenWA webhook must be received as a RAW body so its HMAC-SHA256 signature
 // can be verified over the exact bytes. Mount this BEFORE the global express.json().
 app.use('/api/webhooks/openwa', express.raw({ type: '*/*', limit: '2mb' }));
+// Viber signs deliveries the same way (HMAC over the raw body).
+app.use('/api/webhooks/viber', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(fileUpload({ limits: { fileSize: 6 * 1024 * 1024 } }));
 
@@ -68,6 +70,8 @@ app.use('/logo.webp', publicCors);
 app.use('/logo.png', publicCors);
 app.use('/bot', publicCors);
 app.use('/api/channels/webhook', publicCors);
+// V11 provider webhooks are public too (Telegram & Viber must reach them).
+app.use('/api/webhooks', publicCors);
 app.use('/widget.js', helmetPublic);
 app.use('/logo.webp', helmetPublic);
 app.use('/logo.png', helmetPublic);
@@ -90,7 +94,13 @@ app.use('/api/channels', require('./routes/channels'));
 const { webhookRouter, orgRouter } = require('./routes/openwa');
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/org/openwa', orgRouter);
+// Telegram + Viber (V11): provider webhooks + per-org bot token management
+const { webhookRouter: botWebhooks, orgRouter: botOrg } = require('./routes/telegramViber');
+app.use('/api/webhooks', botWebhooks);
+app.use('/api/org/bots', botOrg);
 app.use('/api/inbox', require('./routes/inbox'));
+app.use('/api/broadcasts', require('./routes/broadcasts'));
+const { startBroadcastSweeper } = require('./services/broadcasts');
 app.use('/api/billing', require('./routes/billing'));
 app.use('/api/agency', require('./routes/agency'));
 app.use('/api/admin', require('./routes/admin'));
@@ -113,4 +123,5 @@ app.use((err, req, res, next) => {
 app.listen(config.port, () => {
   console.log(`Chitra AI backend running on port ${config.port} (${config.env})`);
   startKeepAlive();
+  startBroadcastSweeper(); // V11: due broadcasts (opted-in contacts) — no-op when queue empty
 });

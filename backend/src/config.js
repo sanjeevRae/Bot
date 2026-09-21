@@ -20,7 +20,6 @@ const config = {
     apiKey: process.env.GROQ_API_KEY_2 || '',
     model: process.env.GROQ_MODEL_2 || 'llama-3.1-8b-instant',
   },
-
   // Fallback LLM provider (used when Groq is down or rate-limited)
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
@@ -40,6 +39,16 @@ const config = {
   },
   messenger: {
     pageToken: process.env.MESSENGER_PAGE_TOKEN || '',
+  },
+
+  // V11 channels: Telegram + Viber (connect-your-own-bot). Tokens are
+  // per-org and live in settings.channel_settings — these globals only hold
+  // the public backend URL webhooks are registered against.
+  telegram: {
+    publicBackendUrl: process.env.PUBLIC_BACKEND_URL || '',
+  },
+  viber: {
+    publicBackendUrl: process.env.PUBLIC_BACKEND_URL || '',
   },
 
   // Self-hosted OpenWA WhatsApp gateway (external service — runs on the user's own
@@ -143,6 +152,17 @@ const config = {
     chunkSize: 400,   // tokens approx
     chunkOverlap: 50,
     topK: 5,
+  },
+
+  // Knowledge-base ingest helpers (V10): OCR of menu/price photos and the
+  // limits applied to everything a merchant can upload.
+  knowledge: {
+    // OCR.space free key (no card, 25k/month). When empty, image OCR falls back
+    // to the Groq vision model if a Groq key is configured.
+    ocrSpaceKey: process.env.OCR_SPACE_API_KEY || '',
+    ocrLanguage: process.env.OCR_LANGUAGE || 'eng',
+    maxFileBytes: parseInt(process.env.KB_MAX_FILE_BYTES || String(5 * 1024 * 1024), 10),
+    maxAudioBytes: parseInt(process.env.KB_MAX_AUDIO_BYTES || String(20 * 1024 * 1024), 10),
   },
 };
 

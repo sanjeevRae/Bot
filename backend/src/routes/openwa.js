@@ -4,7 +4,8 @@ const supabaseAdmin = require('../lib/supabase');
 const config = require('../config');
 const { requireAuth } = require('../middleware/auth');
 const openwa = require('../services/openwa');
-const { runChatForChannel } = require('./channels');
+const { normalizeInbound } = require('../services/channelMedia');
+const { handleInbound, runChatForChannel } = require('./channels');
 
 // ============================================================
 // OpenWA ⇄ Chitra integration
@@ -115,11 +116,6 @@ async function handleOpenwaEvent(payload) {
 
   const data = payload.data;
   if (!data || typeof data !== 'object') return;
-
-  // Only text messages for now. Other types are safely ignored.
-  if (data.type && data.type !== 'text') return;
-  const body = String(data.body || '').trim();
-  if (!body) return;
   if (data.fromMe) return; // ignore our own outbound echoes
 
   const isGroup = data.isGroup === true || String(data.chatId || '').endsWith('@g.us');
@@ -128,7 +124,7 @@ async function handleOpenwaEvent(payload) {
   let from = sanitizeJid(data.from || data.chatId);
   if (!from) return;
 
-  console.log('[OpenWA] Incoming message', { event, sessionId, from });
+  console.log('[OpenWA] Incoming message', { event, sessionId, from, type: data.type });
 
   // WhatsApp privacy ids (`@lid`) cannot be used as send targets — resolve the
   // real phone number first so replies reach the customer.
@@ -149,46 +145,82 @@ async function handleOpenwaEvent(payload) {
     console.warn('[OpenWA] Session identified: none (no whatsapp_connections mapping)', { sessionId });
     return;
   }
-  console.log('[OpenWA] Session identified', { sessionId, orgId: conn.organization_id });
-
   const orgId = conn.organization_id;
+
   const sessionKey = `whatsapp_${replyTo.split('@')[0]}`;
-  const messageBody = body.slice(0, 4000);
+  const target = { channel: 'openwa', sessionId, chatId: replyTo };
 
   try {
-    // Store the user turn in the EXISTING conversation system.
-    await supabaseAdmin.from('chat_history').insert({
-      organization_id: orgId,
-      session_id: sessionKey,
-      role: 'user',
-      message: messageBody,
-      channel: 'whatsapp',
+    // V11: voice notes, photos, locations and button taps are decoded into
+    // text here (via the shared normaliser) instead of being dropped.
+    const normalize = async () => {
+      const kind = openwaKindOf(data);
+      if (kind === 'audio' || kind === 'image') {
+        // Prefer gateway-downloadable bytes; fall back to a URL if the payload
+        // carries one. `downloadMedia` returns null on older gateway builds.
+        const buffer = data.id ? await openwa.downloadMedia(sessionId, data.id) : null;
+        return normalizeInbound({
+          kind,
+          // Already-downloaded bytes win; otherwise a URL the gateway handed
+          // us; otherwise the normaliser reports a readable failure and the
+          // customer gets the "please type it" fallback instead of silence.
+          buffer,
+          mediaUrl: buffer ? null : data.mediaUrl || data.url || null,
+          mediaName: kind === 'audio' ? 'voice-note.ogg' : 'photo.jpg',
+          mimetype: data.mimetype || undefined,
+          caption: data.caption || undefined,
+        });
+      }
+      if (kind === 'location') {
+        return normalizeInbound({
+          kind: 'location',
+          latitude: data.latitude ?? data.lat,
+          longitude: data.longitude ?? data.lng,
+          locationName: data.name || data.address,
+        });
+      }
+      if (kind === 'interactive') {
+        return normalizeInbound({
+          kind: 'interactive',
+          interactiveId: data.selectedId || data.buttonId || data.payload,
+          interactiveTitle: data.selectedTitle || data.buttonText || data.body,
+          text: data.body,
+        });
+      }
+      return normalizeInbound({ kind, text: data.body, caption: data.caption });
+    };
+
+    await handleInbound({
+      channel: 'openwa',
+      orgId,
+      sessionId: sessionKey,
+      remoteId: replyTo.split('@')[0],
+      target,
+      profileName: data.senderName || data.pushName,
+      normalize,
     });
-
-    console.log('[OpenWA] Processing with Chitra AI', { sessionId, orgId, replyTo });
-    // Reuse the existing RAG + Groq + tools + quota pipeline (no duplicate AI logic).
-    const reply = await runChatForChannel(orgId, sessionKey, messageBody, 'whatsapp');
-    if (!reply || !reply.trim()) {
-      console.warn('[OpenWA] Empty AI reply', { sessionId, orgId, replyTo });
-      return;
-    }
-
-    // Store the assistant turn.
-    await supabaseAdmin.from('chat_history').insert({
-      organization_id: orgId,
-      session_id: sessionKey,
-      role: 'assistant',
-      message: reply.slice(0, 4000),
-      channel: 'whatsapp',
-    });
-
-    console.log('[OpenWA] Sending response', { sessionId, orgId, replyTo });
-    await openwa.sendText(sessionId, replyTo, reply.slice(0, 4096));
-    console.log('[OpenWA] Message sent', { sessionId, orgId, replyTo });
+    console.log('[OpenWA] Message handled', { sessionId, orgId, replyTo });
   } catch (err) {
     // Crash the message, never the process.
     console.error('[OpenWA] Message handling failed:', err.message, { sessionId, orgId, replyTo });
   }
+}
+
+/**
+ * Map an OpenWA payload type to the shared normaliser's `kind`.
+ * OpenWA is engine-neutral, so builds differ: WhatsApp Web-style `ptt`/`voice`,
+ * Baileys-style `audio`, or a generic `media` with a mimetype.
+ */
+function openwaKindOf(data) {
+  const type = String(data.type || '').toLowerCase();
+  const mime = String(data.mimetype || '').toLowerCase();
+  if (['ptt', 'voice', 'audio'].includes(type) || mime.startsWith('audio/')) return 'audio';
+  if (['image', 'photo', 'sticker'].includes(type) || mime.startsWith('image/')) return type === 'sticker' ? 'sticker' : 'image';
+  if (type === 'location') return 'location';
+  if (['buttons_response', 'list_response', 'interactive', 'button'].includes(type)) return 'interactive';
+  if (type === 'document') return 'document';
+  if (type === 'video') return 'video';
+  return type === 'text' || !type ? 'text' : 'other';
 }
 
 // ============================================================

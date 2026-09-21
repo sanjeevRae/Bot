@@ -18,6 +18,55 @@ function chunkText(text, chunkSize = config.rag.chunkSize, overlap = config.rag.
 }
 
 /**
+ * Paragraph-aware chunking, used for content where line structure carries the
+ * meaning: business facts, Q&A pairs, spreadsheet rows. Splitting those on a
+ * blind word window would cut "Q: How much is delivery?" away from its answer,
+ * which is exactly what the retriever needs together.
+ *
+ * Blocks are packed up to `chunkSize` words (no overlap — a block is never cut),
+ * and a single oversized block falls back to the word-window chunker.
+ */
+function chunkByParagraphs(text, chunkSize = config.rag.chunkSize) {
+  const blocks = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .split(/\n{2,}/)
+    .map((b) => b.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+
+  if (!blocks.length) return [];
+
+  const countWords = (s) => s.split(/\s+/).filter(Boolean).length;
+  const chunks = [];
+  let buffer = [];
+  let bufferedWords = 0;
+
+  const flush = () => {
+    if (!buffer.length) return;
+    const joined = buffer.join('\n\n').trim();
+    if (joined.length > 20) chunks.push(joined);
+    buffer = [];
+    bufferedWords = 0;
+  };
+
+  for (const block of blocks) {
+    const words = countWords(block);
+
+    if (words > chunkSize) {
+      flush();
+      chunks.push(...chunkText(block, chunkSize, 0));
+      continue;
+    }
+
+    if (bufferedWords + words > chunkSize) flush();
+    buffer.push(block);
+    bufferedWords += words;
+  }
+  flush();
+
+  return chunks;
+}
+
+/**
  * Extract readable text from raw HTML using Cheerio (robust DOM parsing).
  * De-noises boilerplate (nav/footer/cookie banners) and prefers the main
  * content region when the page has one.
@@ -565,4 +614,4 @@ async function _crawlSiteInner(startUrl, opts = {}) {
   };
 }
 
-module.exports = { chunkText, extractTextFromHtml, extractJsonLd, extractMicroData, crawlUrl, crawlSite };
+module.exports = { chunkText, chunkByParagraphs, extractTextFromHtml, extractJsonLd, extractMicroData, crawlUrl, crawlSite };
