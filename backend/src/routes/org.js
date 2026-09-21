@@ -92,11 +92,16 @@ router.patch('/settings', requireAuth, async (req, res) => {
 router.get('/channels', requireAuth, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('settings')
-    .select('whatsapp_number, whatsapp_phone_number_id, messenger_page_id')
+    .select('whatsapp_number, whatsapp_phone_number_id, messenger_page_id, channel_settings')
     .eq('organization_id', req.orgId)
     .maybeSingle();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  const storedPrefs = prefs.prefsOf(data);
+  const hasTelegram = Boolean(prefs.orgBotToken(storedPrefs, 'telegram'));
+  const hasViber = Boolean(prefs.orgBotToken(storedPrefs, 'viber'));
+  const sms = require('../services/sms');
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   res.json({
@@ -110,6 +115,15 @@ router.get('/channels', requireAuth, async (req, res) => {
         connected: !!data?.messenger_page_id,
         pageId: data?.messenger_page_id || '',
       },
+      telegram: {
+        connected: hasTelegram,
+      },
+      viber: {
+        connected: hasViber,
+      },
+      sms: {
+        configured: sms.isSmsConfigured(),
+      },
     },
     webhookUrl: `${backendUrl}/api/channels/webhook`,
     verifyTokenHint: 'Set META_VERIFY_TOKEN in backend env; use the same value in Meta App dashboard.',
@@ -119,37 +133,89 @@ router.get('/channels', requireAuth, async (req, res) => {
 /** POST /api/org/channels — connect a messaging channel */
 router.post('/channels', requireAuth, async (req, res) => {
   const { channel, externalId } = req.body;
-  const valid = { whatsapp: 'whatsapp_phone_number_id', messenger: 'messenger_page_id' };
-  if (!valid[channel]) return res.status(400).json({ error: 'channel must be "whatsapp" or "messenger"' });
-  if (!externalId) return res.status(400).json({ error: 'externalId is required' });
 
-  const updates = { [valid[channel]]: String(externalId).trim(), updated_at: new Date().toISOString() };
-  const { data, error } = await supabaseAdmin
-    .from('settings')
-    .update(updates)
-    .eq('organization_id', req.orgId)
-    .select('whatsapp_number, whatsapp_phone_number_id, messenger_page_id')
-    .single();
+  // Legacy Meta channels — flat columns on settings
+  const metaValid = { whatsapp: 'whatsapp_phone_number_id', messenger: 'messenger_page_id' };
+  if (metaValid[channel]) {
+    if (!externalId) return res.status(400).json({ error: 'externalId is required' });
+    const updates = { [metaValid[channel]]: String(externalId).trim(), updated_at: new Date().toISOString() };
+    const { data, error } = await supabaseAdmin
+      .from('settings')
+      .update(updates)
+      .eq('organization_id', req.orgId)
+      .select('whatsapp_number, whatsapp_phone_number_id, messenger_page_id')
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    meCache.delete(req.orgId);
+    invalidateOrgContext(req.orgId);
+    return res.json({ ok: true, settings: data });
+  }
 
-  if (error) return res.status(500).json({ error: error.message });
-  meCache.delete(req.orgId);
-  res.json({ ok: true, settings: data });
+  // V11 bot-token channels — stored in channel_settings JSONB
+  const tokenChannels = { telegram: 'telegram', viber: 'viber' };
+  if (tokenChannels[channel]) {
+    if (!externalId) return res.status(400).json({ error: `${channel} bot token is required` });
+    const { data: current } = await supabaseAdmin
+      .from('settings')
+      .select('channel_settings')
+      .eq('organization_id', req.orgId)
+      .maybeSingle();
+    const stored = prefs.prefsOf(current);
+    stored[tokenChannels[channel]] = { botToken: String(externalId).trim() };
+    const { data, error } = await supabaseAdmin
+      .from('settings')
+      .update({ channel_settings: stored, updated_at: new Date().toISOString() })
+      .eq('organization_id', req.orgId)
+      .select('channel_settings')
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    meCache.delete(req.orgId);
+    invalidateOrgContext(req.orgId);
+    return res.json({ ok: true, settings: data });
+  }
+
+  return res.status(400).json({ error: 'channel must be "whatsapp", "messenger", "telegram", or "viber"' });
 });
 
 /** DELETE /api/org/channels/:channel — disconnect a channel */
 router.delete('/channels/:channel', requireAuth, async (req, res) => {
-  const valid = { whatsapp: 'whatsapp_phone_number_id', messenger: 'messenger_page_id' };
-  const col = valid[req.params.channel];
-  if (!col) return res.status(400).json({ error: 'Unknown channel' });
+  const metaValid = { whatsapp: 'whatsapp_phone_number_id', messenger: 'messenger_page_id' };
+  const col = metaValid[req.params.channel];
 
-  const { error } = await supabaseAdmin
-    .from('settings')
-    .update({ [col]: null, updated_at: new Date().toISOString() })
-    .eq('organization_id', req.orgId);
+  if (col) {
+    const { error } = await supabaseAdmin
+      .from('settings')
+      .update({ [col]: null, updated_at: new Date().toISOString() })
+      .eq('organization_id', req.orgId);
+    if (error) return res.status(500).json({ error: error.message });
+    meCache.delete(req.orgId);
+    invalidateOrgContext(req.orgId);
+    return res.json({ ok: true });
+  }
 
-  if (error) return res.status(500).json({ error: error.message });
-  meCache.delete(req.orgId);
-  res.json({ ok: true });
+  // V11 bot-token channels
+  const tokenChannels = { telegram: 'telegram', viber: 'viber' };
+  if (tokenChannels[req.params.channel]) {
+    const { data: current } = await supabaseAdmin
+      .from('settings')
+      .select('channel_settings')
+      .eq('organization_id', req.orgId)
+      .maybeSingle();
+    const stored = prefs.prefsOf(current);
+    if (stored[tokenChannels[req.params.channel]]) {
+      delete stored[tokenChannels[req.params.channel]];
+      const { error } = await supabaseAdmin
+        .from('settings')
+        .update({ channel_settings: stored, updated_at: new Date().toISOString() })
+        .eq('organization_id', req.orgId);
+      if (error) return res.status(500).json({ error: error.message });
+      meCache.delete(req.orgId);
+      invalidateOrgContext(req.orgId);
+    }
+    return res.json({ ok: true });
+  }
+
+  return res.status(400).json({ error: 'Unknown channel' });
 });
 
 /**
