@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api, supabase } from '../lib/supabaseClient';
-import { PLANS, PAID_PLANS, planLabel } from '../lib/plans';
+import { PLANS, PAID_PLANS, planLabel, planPrice, ANNUAL_DISCOUNT } from '../lib/plans';
 
 export default function Billing() {
   const [me, setMe] = useState(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+  // Billing cycle for the plan grid: monthly (default) or yearly (40% off).
+  const [annual, setAnnual] = useState(false);
 
   /* ---- upgrade request dialog ---- */
   const [openPlan, setOpenPlan] = useState(null); // plan id, or null when closed
@@ -66,9 +68,21 @@ export default function Billing() {
     setSending(true);
     setFormError('');
     try {
+      // An annual order is invoiced once for 12 months, so spell out the cycle
+      // that was on screen when the request was sent. Monthly stays implicit.
+      // The payload shape is unchanged — the note rides along inside `message`.
+      let payload = form;
+      if (annual) {
+        const chosen = PLANS.find((p) => p.id === form.plan);
+        const q = chosen ? planPrice(chosen, true) : null;
+        const note = q
+          ? `Preferred billing: Annually - ${q.price}${q.per || ''} (${q.period})`
+          : 'Preferred billing: Annually';
+        payload = { ...form, message: [form.message.trim(), note].filter(Boolean).join('\n\n') };
+      }
       const data = await api('/api/billing/request', {
         method: 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       setSent({ orderId: data.orderId, planName: data.planName || planLabel(form.plan) });
     } catch (err) {
@@ -87,6 +101,10 @@ export default function Billing() {
   const expires = me && me.org && me.org.plan_expires_at
     ? new Date(me.org.plan_expires_at).toLocaleDateString()
     : null;
+
+  // Price line shown inside the upgrade dialog, for the plan + cycle selected.
+  const dialogPlan = PLANS.find((p) => p.id === form.plan) || null;
+  const dialogPrice = dialogPlan ? planPrice(dialogPlan, annual) : null;
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10 sm:px-6 sm:py-12">
@@ -113,9 +131,47 @@ export default function Billing() {
         <div className="mb-6 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
       )}
 
+      {/* Billing-cycle toggle — the same black/white pill as the landing page. */}
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <span className="text-sm text-ink-500">
+          Annually (save {Math.round(ANNUAL_DISCOUNT * 100)}%)
+        </span>
+        <div
+          role="group"
+          aria-label="Billing cycle"
+          className="relative grid grid-cols-2 rounded-full border border-gray-200 bg-white p-1"
+        >
+          {/* Sliding black pill. The container pads 4px, so one segment is
+              calc(50% - 4px) wide — translating by 100% lands it on the next. */}
+          <span
+            aria-hidden="true"
+            className={`absolute inset-y-1 left-1 w-[calc(50%-4px)] rounded-full bg-ink-900 transition-transform duration-300 ease-out ${
+              annual ? 'translate-x-full' : ''
+            }`}
+          />
+          {[
+            ['Monthly', false],
+            ['Annually', true],
+          ].map(([label, value]) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={annual === value}
+              onClick={() => setAnnual(value)}
+              className={`relative z-10 rounded-full px-6 py-1.5 text-sm font-medium transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-900 focus-visible:ring-offset-2 ${
+                annual === value ? 'text-white' : 'text-ink-500 hover:text-ink-900'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3 lg:gap-6">
         {PLANS.map((p) => {
           const isCurrent = currentPlan === p.id;
+          const { price, per, period } = planPrice(p, annual);
           return (
             <div
               key={p.id}
@@ -128,10 +184,11 @@ export default function Billing() {
               )}
               <h3 className="text-sm font-semibold text-ink-900">{p.name}</h3>
               <p className="mt-1">
-                <span className="text-2xl font-bold tracking-tight text-ink-900">{p.price}</span>
-                {p.per && <span className="text-sm text-ink-400">{p.per}</span>}
+                <span className="text-2xl font-bold tracking-tight text-ink-900">{price}</span>
+                {per && <span className="text-sm text-ink-400">{per}</span>}
               </p>
-              <p className="mt-1 text-xs text-ink-400">{p.tagline}</p>
+              <p className="mt-1 text-xs text-ink-400">{period}</p>
+              <p className="mt-0.5 text-xs text-ink-400">{p.tagline}</p>
 
               <ul className="mt-5 flex-1 space-y-2.5">
                 {p.features.map((f) => (
@@ -157,7 +214,7 @@ export default function Billing() {
 
       <p className="mt-8 text-center text-xs leading-relaxed text-ink-400">
         * Multi-client management coming soon &middot; Send a request and our team activates your plan &middot;
-        Subscriptions last 30 days per payment
+        Monthly subscriptions last 30 days per payment &middot; annual subscriptions are billed once for 12 months
       </p>
 
       {/* ---- upgrade request dialog ---- */}
@@ -217,11 +274,24 @@ export default function Billing() {
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-ink-600">Plan</span>
                     <select {...bind('plan')} className="input-base">
-                      {PAID_PLANS.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name} - {p.price}{p.per || ''}</option>
-                      ))}
+                      {PAID_PLANS.map((p) => {
+                        const q = planPrice(p, annual);
+                        return (
+                          <option key={p.id} value={p.id}>{p.name} - {q.price}{q.per || ''}</option>
+                        );
+                      })}
                     </select>
                   </label>
+
+                  {dialogPrice && (
+                    <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-ink-600">
+                      Billing:{' '}
+                      <span className="font-medium text-ink-900">{annual ? 'Annually' : 'Monthly'}</span>
+                      <span className="text-ink-400">
+                        {' '}&middot; {dialogPrice.price}{dialogPrice.per || ''} ({dialogPrice.period})
+                      </span>
+                    </p>
+                  )}
                   <label className="block">
                     <span className="mb-1 block text-xs font-medium text-ink-600">
                       Message <span className="font-normal text-ink-400">(optional)</span>
