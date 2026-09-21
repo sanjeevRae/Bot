@@ -174,6 +174,8 @@ export default function Channels() {
 
       {/* OpenWA — self-hosted WhatsApp gateway (added as a new channel; existing channels untouched) */}
       <section className="card mb-8 p-6">
+        
+
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" alt="" width="22" height="22" />
@@ -203,7 +205,7 @@ export default function Channels() {
             )}
           </div>
         ) : (
-
+          
 
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -221,8 +223,7 @@ export default function Channels() {
             </p>
           </div>
         )}
-        <p className="text-xs text-ink-400">
-            Optional</p>
+        
             
         {openwa?.connected && (
           <div className="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4">
