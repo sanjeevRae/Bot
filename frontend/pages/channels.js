@@ -1,5 +1,34 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { api } from '../lib/supabaseClient';
+
+function TelegramIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg className={className} viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid">
+      <defs><linearGradient id="tg" x1="50%" x2="50%" y1="0%" y2="100%"><stop offset="0%" stop-color="#2AABEE"/><stop offset="100%" stop-color="#229ED9"/></linearGradient></defs>
+      <path fill="url(#tg)" d="M128 0C94.06 0 61.48 13.494 37.5 37.49A128.038 128.038 0 0 0 0 128c0 33.934 13.5 66.514 37.5 90.51C61.48 242.506 94.06 256 128 256s66.52-13.494 90.5-37.49c24-23.996 37.5-56.576 37.5-90.51 0-33.934-13.5-66.514-37.5-90.51C194.52 13.494 161.94 0 128 0Z"/>
+      <path fill="#FFF" d="M57.94 126.648c37.32-16.256 62.2-26.974 74.64-32.152 35.56-14.786 42.94-17.354 47.76-17.441 1.06-.017 3.42.245 4.96 1.49 1.28 1.05 1.64 2.47 1.82 3.467.16.996.38 3.266.2 5.038-1.92 20.24-10.26 69.356-14.5 92.026-1.78 9.592-5.32 12.808-8.74 13.122-7.44.684-13.08-4.912-20.28-9.63-11.26-7.386-17.62-11.982-28.56-19.188-12.64-8.328-4.44-12.906 2.76-20.386 1.88-1.958 34.64-31.748 35.26-34.45.08-.338.16-1.598.2-2.262-.74-.666-1.84-.438-2.64-.258-1.14.256-19.12 12.152-54 35.686-5.1 3.508-9.72 5.218-13.88 5.128-4.56-.098-13.36-2.584-19.9-4.708-8-2.606-14.38-3.984-13.82-8.41.28-2.304 3.46-4.662 9.52-7.072Z"/>
+    </svg>
+  );
+}
+
+function ViberIcon({ className = 'h-5 w-5' }) {
+  return (
+    <img
+      src="https://cdn.jsdelivr.net/gh/glincker/thesvg@main/public/icons/viber/default.svg"
+      alt="Viber"
+      className={className}
+    />
+  );
+}
+
+function SmsIcon({ className = 'h-5 w-5' }) {
+  return (
+    <svg className={className} fill="#34DA50" role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <title>iMessage</title>
+      <path d="M5.285 0A5.273 5.273 0 0 0 0 5.285v13.43A5.273 5.273 0 0 0 5.285 24h13.43A5.273 5.273 0 0 0 24 18.715V5.285A5.273 5.273 0 0 0 18.715 0ZM12 4.154a8.809 7.337 0 0 1 8.809 7.338A8.809 7.337 0 0 1 12 18.828a8.809 7.337 0 0 1-2.492-.303A8.656 7.337 0 0 1 5.93 19.93a9.929 7.337 0 0 0 1.54-2.155 8.809 7.337 0 0 1-4.279-6.283A8.809 7.337 0 0 1 12 4.154"/>
+    </svg>
+  );
+}
 
 export default function Channels() {
   const [data, setData] = useState(null);
@@ -11,6 +40,9 @@ export default function Channels() {
   const [openwa, setOpenwa] = useState(null);
   const [owaSession, setOwaSession] = useState('');
   const [owaChatId, setOwaChatId] = useState('');
+  // V11 bot-token channels
+  const [tgToken, setTgToken] = useState('');
+  const [viberToken, setViberToken] = useState('');
 
   async function load() {
     try {
@@ -238,6 +270,121 @@ export default function Channels() {
               <button onClick={testOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Send test</button>
             </div>
           </div>
+        )}
+      </section>
+
+      {/* Telegram — connect-your-own-bot (V11) */}
+      <section className="card mb-5 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center">
+              <TelegramIcon />
+            </div>
+            <h2 className="text-sm font-semibold text-ink-900">Telegram</h2>
+          </div>
+          <span className={channels.telegram?.connected ? 'chip-success' : 'chip'}>
+            {channels.telegram?.connected ? 'Connected' : 'Not connected'}
+          </span>
+        </div>
+
+        {channels.telegram?.connected ? (
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-500">
+              Bot token connected. Set your webhook in BotFather to <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{webhookUrl.replace('/api/channels/webhook', '/api/webhooks/telegram/:orgId')}</code>
+            </p>
+            <button
+              onClick={() => disconnect('telegram')}
+              disabled={busy}
+              className="btn-secondary !py-2 text-xs"
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={tgToken}
+              onChange={(e) => setTgToken(e.target.value)}
+              placeholder="Bot token (e.g. 123456:ABC-…)"
+              className="input-base flex-1 !py-2 text-[13px]"
+            />
+            <button
+              onClick={() => connect('telegram', tgToken)}
+              disabled={busy}
+              className="btn-primary !py-2 text-xs"
+            >
+              Connect
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Viber — connect-your-own-bot (V11) */}
+      <section className="card mb-5 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ViberIcon />
+            <h2 className="text-sm font-semibold text-ink-900">Viber</h2>
+          </div>
+          <span className={channels.viber?.connected ? 'chip-success' : 'chip'}>
+            {channels.viber?.connected ? 'Connected' : 'Not connected'}
+          </span>
+        </div>
+
+        {channels.viber?.connected ? (
+          <div className="space-y-3">
+            <p className="text-[13px] text-ink-500">
+              Bot token connected. Set your webhook in the Viber dashboard to <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{webhookUrl.replace('/api/channels/webhook', '/api/webhooks/viber/:orgId')}</code>
+            </p>
+            <button
+              onClick={() => disconnect('viber')}
+              disabled={busy}
+              className="btn-secondary !py-2 text-xs"
+            >
+              Disconnect
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={viberToken}
+              onChange={(e) => setViberToken(e.target.value)}
+              placeholder="Bot token"
+              className="input-base flex-1 !py-2 text-[13px]"
+            />
+            <button
+              onClick={() => connect('viber', viberToken)}
+              disabled={busy}
+              className="btn-primary !py-2 text-xs"
+            >
+              Connect
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* SMS — backend-configured (admin only) */}
+      <section className="card mb-8 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center">
+              <SmsIcon />
+            </div>
+            <h2 className="text-sm font-semibold text-ink-900">SMS</h2>
+          </div>
+          <span className={channels.sms?.configured ? 'chip-success' : 'chip'}>
+            {channels.sms?.configured ? 'Configured' : 'Not configured'}
+          </span>
+        </div>
+
+        {channels.sms?.configured ? (
+          <p className="text-[13px] text-ink-500">
+            SMS is enabled via your SMS provider. SMS sends are counted against your monthly message quota. Used for booking confirmations and handoff pings.
+          </p>
+        ) : (
+          <p className="text-[13px] text-ink-500">
+            Contact support to enable it for your account.
+          </p>
         )}
       </section>
 
