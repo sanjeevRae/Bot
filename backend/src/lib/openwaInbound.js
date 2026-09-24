@@ -51,13 +51,19 @@ function mentionTokens(body) {
   return (String(body || '').match(/@\d{6,20}/g) || []).map((t) => t.slice(1));
 }
 
-/** Does one `mentionedIds`/`mentions` entry point at this session's own number? */
-function isOwnId(entry, ownDigits, ownWid) {
+/**
+ * Does one `mentionedIds`/`mentions`/body-token value point at this session?
+ * Matches the phone-form WID, any learned `@lid` of our own, or digits of either.
+ */
+function isOwnId(entry, ownDigits, ownWid, ownLids = []) {
   if (!entry) return false;
-  const value = String(entry).trim();
-  if (ownWid && value.toLowerCase() === ownWid.toLowerCase()) return true;
+  const value = String(entry).trim().toLowerCase();
+  if (ownWid && value === ownWid.toLowerCase()) return true;
+  if (ownLids.some((lid) => String(lid).toLowerCase() === value)) return true;
   const digits = digitsOf(value);
-  return Boolean(digits && ownDigits && digits === String(ownDigits));
+  if (!digits) return false;
+  if (ownDigits && digits === String(ownDigits)) return true;
+  return ownLids.some((lid) => digitsOf(lid) === digits);
 }
 
 /**
@@ -77,25 +83,46 @@ function nameMentioned(body, ownName) {
  * 'mentionedIds' | 'mentions' | 'body-number' | 'body-name' | null.
  * The structured lists are authoritative; the body checks are the fallback for
  * builds that omit them. Single source of truth for both the decision and the
- * diagnostics endpoint.
+ * diagnostics endpoint. `ownLids` are the session's own privacy ids — WhatsApp
+ * increasingly reports a mention of us as `@lid` rather than as our number.
  */
-function matchedBy(data, ownDigits, ownWid, ownName = null) {
+function matchedBy(data, ownDigits, ownWid, ownName = null, ownLids = []) {
   const lists = [['mentionedIds', data?.mentionedIds], ['mentions', data?.mentions]];
   for (const [key, list] of lists) {
-    if (Array.isArray(list) && list.some((entry) => isOwnId(entry, ownDigits, ownWid))) return key;
+    if (Array.isArray(list) && list.some((entry) => isOwnId(entry, ownDigits, ownWid, ownLids))) return key;
   }
-  if (ownDigits && mentionTokens(data?.body).includes(String(ownDigits))) return 'body-number';
+  const tokens = mentionTokens(data?.body);
+  if (tokens.some((token) => isOwnId(token, ownDigits, ownWid, ownLids))) return 'body-number';
   if (ownName && nameMentioned(data?.body, ownName)) return 'body-name';
   return null;
 }
 
 /**
  * Was this session mentioned? `ownWid`/`ownDigits`/`ownName` come from the
- * session's own number and display name.
+ * session's own number and display name, `ownLids` from its privacy ids.
  */
-function mentionedOwnId(data, ownDigits, ownWid, ownName = null) {
-  if (!ownDigits && !ownWid && !ownName) return false;
-  return matchedBy(data, ownDigits, ownWid, ownName) !== null;
+function mentionedOwnId(data, ownDigits, ownWid, ownName = null, ownLids = []) {
+  if (!ownDigits && !ownWid && !ownName && !ownLids.length) return false;
+  return matchedBy(data, ownDigits, ownWid, ownName, ownLids) !== null;
+}
+
+/**
+ * `@lid` mentions that are not (yet) known to be ours. The caller can resolve
+ * them (contacts lookup / group roster) to learn this session's own privacy id,
+ * which is how a mention like `@248065197879524` becomes recognisable.
+ */
+function unownedLidMentions(data, ownDigits, ownWid, ownLids = []) {
+  const out = [];
+  for (const list of [data?.mentionedIds, data?.mentions]) {
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) {
+      const value = String(entry || '').trim();
+      if (!value.endsWith('@lid')) continue;
+      if (isOwnId(value, ownDigits, ownWid, ownLids)) continue;
+      if (!out.includes(value)) out.push(value);
+    }
+  }
+  return out.slice(0, 5);
 }
 
 /**
@@ -103,9 +130,13 @@ function mentionedOwnId(data, ownDigits, ownWid, ownName = null) {
  * form — so the model receives a plain question instead of a stray token. The
  * digit guard (`(?=\D|$)`) keeps a longer number that merely starts with ours.
  */
-function stripOwnMention(body, ownDigits, ownName = null) {
+function stripOwnMention(body, ownDigits, ownName = null, ownLids = []) {
   let out = String(body || '');
-  if (ownDigits) out = out.replace(new RegExp(`@${ownDigits}(?=\\D|$)`, 'g'), ' ');
+  // Our number and every learned privacy id — a mention of us can arrive as either.
+  const numbers = [ownDigits, ...ownLids.map((lid) => digitsOf(lid))].filter(Boolean);
+  for (const digits of numbers) {
+    out = out.replace(new RegExp(`@${digits}(?=\\D|$)`, 'g'), ' ');
+  }
   const name = String(ownName || '').trim();
   if (name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -136,7 +167,8 @@ function stripOwnMention(body, ownDigits, ownName = null) {
  *            mentions:string[]|null, body:string, profileName:string|null}}
  */
 function planInbound({
-  data, ownDigits = null, ownWid = null, ownName = null, groupRepliesEnabled = false, senderPhone = null,
+  data, ownDigits = null, ownWid = null, ownName = null, ownLids = [],
+  groupRepliesEnabled = false, senderPhone = null,
 } = {}) {
   const payload = data && typeof data === 'object' ? data : {};
   // Our own outbound echoes.
@@ -175,8 +207,10 @@ function planInbound({
   if (!groupRepliesEnabled) return { action: 'ignore', reason: 'group-disabled' };
   // Without our own identity we cannot tell "the bot was mentioned" from "someone
   // else was", and answering unrelated chatter is worse than staying silent.
-  if (!ownDigits && !ownWid && !ownName) return { action: 'ignore', reason: 'own-id-unknown' };
-  if (!mentionedOwnId(payload, ownDigits, ownWid, ownName)) {
+  if (!ownDigits && !ownWid && !ownName && !ownLids.length) {
+    return { action: 'ignore', reason: 'own-id-unknown' };
+  }
+  if (!mentionedOwnId(payload, ownDigits, ownWid, ownName, ownLids)) {
     return { action: 'ignore', reason: 'group-not-mentioned' };
   }
 
@@ -199,12 +233,13 @@ function planInbound({
     chatId, // answer into the group, never as a DM to the author
     senderJid: authorJid,
     sessionKey: `whatsapp_group_${groupDigits}_${authorDigits}`,
-    // The Inbox/owner-reply path sends to `remote_id`, so keep it the person:
-    // a human takeover DMs the customer instead of posting in the group.
-    remoteId: authorDigits || groupDigits,
+    // The Inbox/owner-reply path sends to `remote_id`, so keep it a real phone:
+    // a `@lid` author's raw digits are not a valid target, so the caller-resolved
+    // phone wins; `sessionKey` stays on the raw author digits (stable either way).
+    remoteId: senderPhone || authorDigits || groupDigits,
     mentionPrefix: tagDigits ? `@${tagDigits}` : null,
     mentions: tagDigits ? [`${tagDigits}@c.us`] : null,
-    body: stripOwnMention(body, ownDigits, ownName) || EMPTY_MENTION_PROMPT,
+    body: stripOwnMention(body, ownDigits, ownName, ownLids) || EMPTY_MENTION_PROMPT,
     profileName,
   };
 }
@@ -213,7 +248,7 @@ function planInbound({
  * Everything the diagnostics endpoint needs to explain a group decision, kept
  * out of `planInbound` so the policy function stays a plain decision.
  */
-function describeInbound({ data, ownDigits = null, ownWid = null, ownName = null } = {}) {
+function describeInbound({ data, ownDigits = null, ownWid = null, ownName = null, ownLids = [] } = {}) {
   const payload = data && typeof data === 'object' ? data : {};
   const listed = []
     .concat(Array.isArray(payload.mentionedIds) ? payload.mentionedIds : [])
@@ -223,12 +258,16 @@ function describeInbound({ data, ownDigits = null, ownWid = null, ownName = null
     isGroup: payload.isGroup === true || isGroupChat(payload.chatId || payload.from),
     ownNumber: ownDigits || null,
     ownName: ownName || null,
+    // Privacy ids of our own learned so far — the missing piece when a mention
+    // arrives as "@<lid>" instead of "@<number>".
+    learnedLids: ownLids.slice(0, 5),
+    unownedMentions: unownedLidMentions(payload, ownDigits, ownWid, ownLids),
     // What the gateway actually offered, so a miss is explainable (capped — this
     // is a debugging aid, not a transcript).
     offeredMentions: listed.map(String).slice(0, 5),
     bodyMentions: mentionTokens(payload.body).slice(0, 5),
     bodyPreview: String(payload.body || '').slice(0, 80),
-    matchedBy: matchedBy(payload, ownDigits, ownWid, ownName),
+    matchedBy: matchedBy(payload, ownDigits, ownWid, ownName, ownLids),
   };
 }
 
@@ -243,6 +282,7 @@ module.exports = {
   nameMentioned,
   matchedBy,
   mentionedOwnId,
+  unownedLidMentions,
   stripOwnMention,
   planInbound,
   describeInbound,

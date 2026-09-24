@@ -6,7 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const openwa = require('../services/openwa');
 const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
-const { planInbound, describeInbound, digitsOf } = require('../lib/openwaInbound');
+const { planInbound, describeInbound, digitsOf, unownedLidMentions } = require('../lib/openwaInbound');
 const diag = require('../lib/openwaDiagnostics');
 
 // ============================================================
@@ -127,7 +127,14 @@ async function handleOpenwaEvent(payload) {
 
   const data = payload.data;
   if (!data || typeof data !== 'object') return;
-  if (data.fromMe) return; // ignore our own outbound echoes (no DB call needed)
+  if (data.fromMe) {
+    // Our own echo. `from` is this session's own JID there, which is how we learn
+    // our `@lid` — WhatsApp reports a mention of us in that form on LID-addressed
+    // accounts, so knowing it is what makes "was I mentioned?" answerable later.
+    openwa.learnOwnLid(sessionId, data.from);
+    openwa.learnOwnLid(sessionId, data.author);
+    return;
+  }
 
   // Resolve org from stored mapping — never trust payload-supplied org.
   const conn = await getConnectionBySession(sessionId);
@@ -155,16 +162,43 @@ async function handleOpenwaEvent(payload) {
   const ownDigits = digitsOf(conn.phone_number) || identity.digits;
   const ownName = identity.pushName;
   const ownWid = ownDigits ? `${ownDigits}@c.us` : null;
+  let ownLids = openwa.getOwnLids(sessionId);
 
-  const plan = planInbound({
+  const planOpts = {
     data,
     ownDigits,
     ownWid,
     ownName,
+    ownLids,
     groupRepliesEnabled: conn.group_replies_enabled !== false,
     senderPhone,
-  });
-  const facts = describeInbound({ data, ownDigits, ownWid, ownName });
+  };
+  let plan = planInbound(planOpts);
+
+  // A mention of us can arrive as our privacy id (`@248065197879524@lid`) rather
+  // than as our number, and the only way to recognise that is to learn our own
+  // LID: from the group roster (a participant carries both `number` and `id`) or
+  // by resolving the offered mention. Both are cached, and both only run when the
+  // cheap checks above missed — a normal message costs nothing extra.
+  if (plan.action === 'ignore' && plan.reason === 'group-not-mentioned' && ownDigits) {
+    const groupId = String(data.chatId || data.from || '');
+    if (!ownLids.length && groupId.endsWith('@g.us')) {
+      await openwa.learnOwnLidFromGroup(sessionId, groupId, ownDigits);
+      ownLids = openwa.getOwnLids(sessionId);
+    }
+    if (!ownLids.length) {
+      for (const lid of unownedLidMentions(data, ownDigits, ownWid, ownLids)) {
+        const phone = await openwa.resolvePhone(sessionId, lid);
+        if (phone && digitsOf(phone) === ownDigits) {
+          ownLids = openwa.learnOwnLid(sessionId, lid);
+          break;
+        }
+      }
+    }
+    if (ownLids.length) plan = planInbound({ ...planOpts, ownLids });
+  }
+
+  const facts = describeInbound({ data, ownDigits, ownWid, ownName, ownLids });
 
   if (plan.action === 'ignore') {
     if (facts.isGroup && plan.reason !== 'fromMe' && plan.reason !== 'invalid-chat') {

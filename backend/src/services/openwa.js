@@ -236,16 +236,34 @@ async function listGroups(sessionId) {
  * Used because WhatsApp increasingly delivers senders as `@lid` JIDs that
  * cannot be used as send targets directly.
  */
+const phoneCache = new Map();
+const PHONE_TTL_MS = 30 * 60 * 1000;
+const PHONE_FAIL_TTL_MS = 2 * 60 * 1000;
+
 async function resolvePhone(sessionId, contactId) {
+  if (!contactId) return null;
+  // Stable mapping, but a `@lid` sender posts on every message — cache it.
+  const key = `${sessionId}|${contactId}`;
+  const hit = phoneCache.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.phone;
+
+  let phone = null;
   try {
     const data = await request(
       `/api/sessions/${encodeURIComponent(sessionId)}/contacts/${encodeURIComponent(contactId)}/phone`
     );
-    const phone = data && (data.phone || data.phoneNumber || data.number);
-    return typeof phone === 'string' && phone.trim() ? phone.trim() : null;
+    const value = data && (data.phone || data.phoneNumber || data.number);
+    phone = typeof value === 'string' && value.trim() ? value.trim() : null;
   } catch {
-    return null; // best-effort: callers fall back to the raw JID
+    phone = null; // best-effort: callers fall back to the raw JID
   }
+
+  phoneCache.set(key, { phone, at: Date.now(), ttl: phone ? PHONE_TTL_MS : PHONE_FAIL_TTL_MS });
+  if (phoneCache.size > 2000) {
+    const now = Date.now();
+    for (const [k, entry] of phoneCache) if (now - entry.at >= entry.ttl) phoneCache.delete(k);
+  }
+  return phone;
 }
 
 // ------------------------------------------------------------------
@@ -296,6 +314,63 @@ async function getOwnId(sessionId) {
   return (await getOwnIdentity(sessionId)).digits;
 }
 
+// ------------------------------------------------------------------
+// Our own privacy ids (`@lid`). On LID-addressed accounts WhatsApp reports a
+// mention of this session as `@<lid>`, not as its phone number, so the number
+// alone cannot answer "was I mentioned?" — these are learned, never assumed:
+//   - from our own outbound echoes (`from` is our own JID there), and
+//   - from a group roster, where a participant carries both `number` and `id`.
+// Kept per session in memory; a restart simply relearns on the next mention.
+// ------------------------------------------------------------------
+const ownLidsBySession = new Map(); // sessionId -> Set(lowercase jid)
+const rosterCache = new Map(); // `${sessionId}|${groupId}` -> { lid, at, ttl }
+
+function getOwnLids(sessionId) {
+  return Array.from(ownLidsBySession.get(sessionId) || []);
+}
+
+/** Remember one of our own `@lid`s (no-op for anything that is not a LID). */
+function learnOwnLid(sessionId, jid) {
+  const value = String(jid || '').trim().toLowerCase();
+  if (!sessionId || !value.endsWith('@lid')) return getOwnLids(sessionId);
+  const set = ownLidsBySession.get(sessionId) || new Set();
+  set.add(value);
+  ownLidsBySession.set(sessionId, set);
+  return getOwnLids(sessionId);
+}
+
+/**
+ * Find this session's own participant entry in a group and remember its privacy
+ * id. Deterministic (the roster pairs `number` with `id`) and cached per group,
+ * so it runs at most once per group per TTL — only when a mention could not be
+ * matched any other way.
+ */
+async function learnOwnLidFromGroup(sessionId, groupId, ownDigits) {
+  if (!sessionId || !groupId || !ownDigits) return null;
+  const key = `${sessionId}|${groupId}`;
+  const hit = rosterCache.get(key);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.lid;
+
+  let lid = null;
+  try {
+    const info = await request(
+      `/api/sessions/${encodeURIComponent(sessionId)}/groups/${encodeURIComponent(groupId)}`
+    );
+    const participants = Array.isArray(info && info.participants) ? info.participants : [];
+    const mine = participants.find(
+      (p) => String(p && p.number || '').replace(/\D/g, '') === String(ownDigits)
+    );
+    const id = (mine && String(mine.id || '')) || '';
+    if (id.endsWith('@lid')) lid = id;
+  } catch (err) {
+    console.warn('[openwa] group roster lookup failed:', err.message);
+  }
+
+  rosterCache.set(key, { lid, at: Date.now(), ttl: lid ? OWN_ID_TTL_MS : OWN_ID_FAIL_TTL_MS });
+  if (lid) learnOwnLid(sessionId, lid);
+  return lid;
+}
+
 module.exports = {
   listSessions,
   getSession,
@@ -314,4 +389,7 @@ module.exports = {
   resolvePhone,
   getOwnId,
   getOwnIdentity,
+  getOwnLids,
+  learnOwnLid,
+  learnOwnLidFromGroup,
 };
