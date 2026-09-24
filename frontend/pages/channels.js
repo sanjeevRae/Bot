@@ -115,6 +115,16 @@ export default function Channels() {
     setBusy(false);
   }
 
+  // Group chats stay silent unless the bot is @-mentioned; this is the org switch.
+  async function toggleGroupReplies(next) {
+    setBusy(true); setError('');
+    try {
+      await api('/api/org/openwa/settings', { method: 'POST', body: JSON.stringify({ groupRepliesEnabled: next }) });
+      await loadOpenwa();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
   async function testOpenwa() {
     if (!owaChatId.trim()) return;
     setBusy(true); setError('');
@@ -232,6 +242,23 @@ export default function Channels() {
               <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
               <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>
             </div>
+            <label className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3.5 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+                checked={openwa.groupRepliesEnabled !== false}
+                disabled={busy}
+                onChange={(e) => toggleGroupReplies(e.target.checked)}
+              />
+              <span className="text-[13px] text-ink-700">
+                <span className="font-medium">Reply in groups when @-mentioned</span>
+                <span className="mt-0.5 block text-xs text-ink-400">
+                  The bot stays silent in a group chat until someone mentions{' '}
+                  <span className="font-medium">{openwa.phoneNumber || 'its number'}</span>; it then answers
+                  in the group and tags the person who asked. Direct messages are never affected.
+                </span>
+              </span>
+            </label>
             {!openwa.baseUrlConfigured && (
               <p className="text-xs text-amber-600">OpenWA is not configured on the backend (OPENWA_BASE_URL missing).</p>
             )}

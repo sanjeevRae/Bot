@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const openwa = require('../services/openwa');
 const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
+const { planInbound } = require('../lib/openwaInbound');
 
 // ============================================================
 // OpenWA ⇄ Chitra integration
@@ -52,14 +53,6 @@ function verifySignature(rawBody, signature, secret) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// A JID like "628123456789@c.us" (engine-neutral). Reject anything malformed.
-function sanitizeJid(v) {
-  if (!v) return null;
-  const s = String(v).trim();
-  if (!/^[^@\s]+@[^@\s]+$/.test(s)) return null;
-  return s;
-}
-
 function normalizeChatId(v) {
   const s = String(v).trim();
   if (!s) return null;
@@ -67,12 +60,29 @@ function normalizeChatId(v) {
 }
 
 // Resolve the org owning a session from the DB — the only trusted source.
+// The V12 column is optional on purpose: a deploy that lands before
+// migration_v12_openwa_groups.sql has been run must not stop direct messages
+// from being answered, so the lookup falls back to the pre-V12 column set
+// (where `group_replies_enabled` is undefined and therefore treated as enabled).
+const CONNECTION_COLUMNS =
+  'id, organization_id, openwa_session_id, phone_number, status, provider, group_replies_enabled';
+const CONNECTION_COLUMNS_LEGACY = 'id, organization_id, openwa_session_id, phone_number, status, provider';
+
 async function getConnectionBySession(sessionId) {
-  const { data } = await supabaseAdmin
-    .from('whatsapp_connections')
-    .select('id, organization_id, openwa_session_id, phone_number, status, provider')
-    .eq('openwa_session_id', sessionId)
-    .maybeSingle();
+  const fetchRow = (columns) =>
+    supabaseAdmin
+      .from('whatsapp_connections')
+      .select(columns)
+      .eq('openwa_session_id', sessionId)
+      .maybeSingle();
+
+  let { data, error } = await fetchRow(CONNECTION_COLUMNS);
+  if (error && /group_replies_enabled/.test(error.message || '')) {
+    console.warn(
+      '[OpenWA] whatsapp_connections.group_replies_enabled is missing — run migration_v12_openwa_groups.sql'
+    );
+    ({ data } = await fetchRow(CONNECTION_COLUMNS_LEGACY));
+  }
   return data || null;
 }
 
@@ -116,28 +126,7 @@ async function handleOpenwaEvent(payload) {
 
   const data = payload.data;
   if (!data || typeof data !== 'object') return;
-  if (data.fromMe) return; // ignore our own outbound echoes
-
-  const isGroup = data.isGroup === true || String(data.chatId || '').endsWith('@g.us');
-  if (isGroup) return; // group messages ignored for this integration
-
-  let from = sanitizeJid(data.from || data.chatId);
-  if (!from) return;
-
-  console.log('[OpenWA] Incoming message', { event, sessionId, from, type: data.type });
-
-  // WhatsApp privacy ids (`@lid`) cannot be used as send targets — resolve the
-  // real phone number first so replies reach the customer.
-  let replyTo = from;
-  if (from.endsWith('@lid')) {
-    const phone = await openwa.resolvePhone(sessionId, from);
-    if (phone) {
-      replyTo = `${phone.replace(/\D/g, '')}@c.us`;
-      console.log('[OpenWA] Resolved privacy id to phone', { from, replyTo });
-    } else {
-      console.warn('[OpenWA] Could not resolve privacy id to a phone; replying to raw JID', { from });
-    }
-  }
+  if (data.fromMe) return; // ignore our own outbound echoes (no DB call needed)
 
   // Resolve org from stored mapping — never trust payload-supplied org.
   const conn = await getConnectionBySession(sessionId);
@@ -147,8 +136,60 @@ async function handleOpenwaEvent(payload) {
   }
   const orgId = conn.organization_id;
 
-  const sessionKey = `whatsapp_${replyTo.split('@')[0]}`;
-  const target = { channel: 'openwa', sessionId, chatId: replyTo };
+  // Privacy ids (`@lid`) are neither valid send targets nor mentionable numbers,
+  // so one lookup up front serves both the direct and the group path.
+  const senderRaw = String(data.author || data.from || '');
+  const senderPhone = senderRaw.endsWith('@lid')
+    ? await openwa.resolvePhone(sessionId, senderRaw)
+    : null;
+  if (senderRaw.endsWith('@lid') && !senderPhone) {
+    console.warn('[OpenWA] Could not resolve privacy id to a phone', { from: senderRaw });
+  }
+
+  // The session's own number is what turns "somebody was mentioned" into "THIS
+  // bot was mentioned" inside a group (cached — see services/openwa.js).
+  const ownDigits = await openwa.getOwnId(sessionId);
+
+  const plan = planInbound({
+    data,
+    ownDigits,
+    ownWid: ownDigits ? `${ownDigits}@c.us` : null,
+    groupRepliesEnabled: conn.group_replies_enabled !== false,
+    senderPhone,
+  });
+
+  if (plan.action === 'ignore') {
+    if (plan.reason === 'group-disabled' || plan.reason === 'group-not-mentioned' || plan.reason === 'own-id-unknown') {
+      // Expected on every group line that is not addressed to us: one line with
+      // the facts needed to see WHY a mention was not recognised.
+      console.log('[OpenWA] Group message ignored', {
+        sessionId,
+        reason: plan.reason,
+        chatId: data.chatId || null,
+        ownNumberKnown: Boolean(ownDigits),
+        offeredMentions: Array.isArray(data.mentionedIds) ? data.mentionedIds.length : 0,
+      });
+    } else if (plan.reason !== 'fromMe') {
+      console.warn('[OpenWA] Inbound ignored', { sessionId, reason: plan.reason });
+    }
+    return;
+  }
+
+  console.log('[OpenWA] Incoming message', {
+    event, sessionId, from: plan.senderJid, group: plan.isGroup, type: data.type,
+  });
+
+  const target = {
+    channel: 'openwa',
+    sessionId,
+    chatId: plan.chatId, // group JID for group replies, the sender otherwise
+    // Group replies: the `@<number>` token and the matching WID travel together
+    // (channelSend prepends the token to the first part) so the group can see who
+    // the answer is for. Both are absent for direct messages.
+    ...(plan.mentionPrefix ? { mentionPrefix: plan.mentionPrefix } : {}),
+    ...(plan.mentions ? { mentions: plan.mentions } : {}),
+  };
+  const sessionKey = plan.sessionKey;
 
   try {
     // V11: voice notes, photos, locations and button taps are decoded into
@@ -184,25 +225,25 @@ async function handleOpenwaEvent(payload) {
           kind: 'interactive',
           interactiveId: data.selectedId || data.buttonId || data.payload,
           interactiveTitle: data.selectedTitle || data.buttonText || data.body,
-          text: data.body,
+          text: plan.body,
         });
       }
-      return normalizeInbound({ kind, text: data.body, caption: data.caption });
+      return normalizeInbound({ kind, text: plan.body, caption: data.caption });
     };
 
     await handleInbound({
       channel: 'openwa',
       orgId,
       sessionId: sessionKey,
-      remoteId: replyTo.split('@')[0],
+      remoteId: plan.remoteId,
       target,
-      profileName: data.senderName || data.pushName,
+      profileName: plan.profileName,
       normalize,
     });
-    console.log('[OpenWA] Message handled', { sessionId, orgId, replyTo });
+    console.log('[OpenWA] Message handled', { sessionId, orgId, chatId: plan.chatId, group: plan.isGroup });
   } catch (err) {
     // Crash the message, never the process.
-    console.error('[OpenWA] Message handling failed:', err.message, { sessionId, orgId, replyTo });
+    console.error('[OpenWA] Message handling failed:', err.message, { sessionId, orgId, chatId: plan.chatId });
   }
 }
 
@@ -252,6 +293,8 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
       connected: !!conn?.openwa_session_id,
       sessionId: conn?.openwa_session_id || '',
       phoneNumber: conn?.phone_number || '',
+      // V12: group chats are only answered after an @-mention (see lib/openwaInbound.js).
+      groupRepliesEnabled: conn ? conn.group_replies_enabled !== false : false,
       status: (conn?.status === 'disconnected' || conn?.status === 'error')
         ? conn.status                                   // respect the soft disconnect switch
         : (live?.status || conn?.status || 'disconnected'),
@@ -331,6 +374,40 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
 
   if (result.error) return res.status(500).json({ error: result.error.message });
   res.json({ ok: true, connection: result.data, webhookUrl });
+});
+
+// POST /api/org/openwa/settings — group-reply behaviour (V12)
+orgRouter.post('/settings', requireAuth, async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const patch = {};
+  if (typeof body.groupRepliesEnabled === 'boolean') patch.group_replies_enabled = body.groupRepliesEnabled;
+  if (!Object.keys(patch).length) {
+    return res.status(400).json({ error: 'groupRepliesEnabled (boolean) is required' });
+  }
+
+  const { data: conn, error: readErr } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .select('id')
+    .eq('organization_id', req.orgId)
+    .maybeSingle();
+  if (readErr) return res.status(500).json({ error: readErr.message });
+  if (!conn?.id) return res.status(400).json({ error: 'No OpenWA session connected' });
+
+  patch.updated_at = new Date().toISOString();
+  const { error } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .update(patch)
+    .eq('id', conn.id);
+  if (error) {
+    // The column ships with migration_v12 — name it instead of a raw Postgres error.
+    if (/group_replies_enabled/.test(error.message)) {
+      return res.status(500).json({
+        error: 'Database is missing migration_v12_openwa_groups.sql — run it in the Supabase SQL editor.',
+      });
+    }
+    return res.status(500).json({ error: error.message });
+  }
+  res.json({ ok: true, groupRepliesEnabled: patch.group_replies_enabled !== false });
 });
 
 // POST /api/org/openwa/disconnect — mark the org's connection disconnected (keep audit row)

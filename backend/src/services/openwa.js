@@ -92,13 +92,26 @@ async function getQr(sessionId) {
 /**
  * Send a text message on a session.
  * @param {string} sessionId OpenWA session id
- * @param {string} chatId Recipient JID, e.g. "628123456789@c.us"
+ * @param {string} chatId Recipient JID, e.g. "628123456789@c.us" or "<id>@g.us"
  * @param {string} text Body (OpenWA caps at 4096 chars)
+ * @param {object} [opts]
+ * @param {string[]} [opts.mentions] WIDs to @mention. WhatsApp also needs the
+ *   literal `@<number>` token inside `text`, which channelSend prepends for group
+ *   replies (see lib/openwaInbound.js).
+ * @param {string} [opts.quotedMessageId] Quote an earlier message. The id is
+ *   engine-specific and an unresolvable one fails the send instead of degrading,
+ *   so callers leave it unset unless they know the engine.
  */
-async function sendText(sessionId, chatId, text) {
+async function sendText(sessionId, chatId, text, opts = {}) {
+  const mentions = Array.isArray(opts.mentions) ? opts.mentions.filter(Boolean) : [];
   return request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`, {
     method: 'POST',
-    body: { chatId, text },
+    body: {
+      chatId,
+      text,
+      ...(mentions.length ? { mentions } : {}),
+      ...(opts.quotedMessageId ? { quotedMessageId: opts.quotedMessageId } : {}),
+    },
   });
 }
 
@@ -202,6 +215,43 @@ async function resolvePhone(sessionId, contactId) {
   }
 }
 
+// ------------------------------------------------------------------
+// The session's own number, needed to tell "this bot was @-mentioned in the
+// group" from "somebody else was". `GET /sessions/:id` exposes it as `phone`.
+// One lookup is cached because a chatty group would otherwise ask the gateway
+// on every message; failures get a short TTL so a down gateway is not hammered.
+// Callers treat null as "mentions cannot be verified": group messages are then
+// ignored rather than answered on a guess (see lib/openwaInbound.js).
+// ------------------------------------------------------------------
+const ownIdCache = new Map();
+const OWN_ID_TTL_MS = 10 * 60 * 1000;
+const OWN_ID_FAIL_TTL_MS = 60 * 1000;
+
+async function getOwnId(sessionId) {
+  const hit = ownIdCache.get(sessionId);
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.digits;
+
+  let digits = null;
+  try {
+    const session = await getSession(sessionId);
+    const phone = session && (session.phone || session.phoneNumber);
+    digits = phone ? String(phone).replace(/\D/g, '') || null : null;
+  } catch (err) {
+    console.warn('[openwa] own-number lookup failed:', err.message);
+  }
+
+  ownIdCache.set(sessionId, {
+    digits,
+    at: Date.now(),
+    ttl: digits ? OWN_ID_TTL_MS : OWN_ID_FAIL_TTL_MS,
+  });
+  if (ownIdCache.size > 500) {
+    const now = Date.now();
+    for (const [key, entry] of ownIdCache) if (now - entry.at >= entry.ttl) ownIdCache.delete(key);
+  }
+  return digits;
+}
+
 module.exports = {
   listSessions,
   getSession,
@@ -217,4 +267,5 @@ module.exports = {
   registerWebhook,
   listWebhooks,
   resolvePhone,
+  getOwnId,
 };

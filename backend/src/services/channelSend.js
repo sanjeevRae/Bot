@@ -102,7 +102,10 @@ function isWindowError(err) {
  * Send one text reply on any channel, splitting long answers and falling
  * back to a template when WhatsApp's 24h window has closed.
  *
- * @param {object} target  { channel, phoneNumberId?, pageId?, chatId?, recipientId?, sessionId?, botToken? }
+ * Group replies (OpenWA) carry `target.mentionPrefix` — the literal `@<number>`
+ * token WhatsApp requires next to `target.mentions` — on the FIRST part only.
+ *
+ * @param {object} target  { channel, phoneNumberId?, pageId?, chatId?, recipientId?, sessionId?, botToken?, mentions?, mentionPrefix? }
  * @param {string} text    reply text (plain, post-plainText)
  * @param {object} opts    { template?: {name, lang, vars} }
  * @returns {Promise<{sent:number, templated:boolean}>}
@@ -110,6 +113,11 @@ function isWindowError(err) {
 async function sendChannelText(target, text, opts = {}) {
   const channel = target.channel || 'whatsapp';
   const parts = splitReply(text);
+  // OpenWA only: a mention needs the token in the body AND the WID in `mentions`,
+  // and one @-tag per answer is enough — the first part carries it.
+  if (target.mentionPrefix && parts.length) {
+    parts[0] = `${target.mentionPrefix} ${parts[0]}`.slice(0, 4000);
+  }
   const legacy = require('./channels');
   let sent = 0;
   let templated = false;
@@ -140,7 +148,7 @@ async function sendOne(channel, target, text, legacy) {
       return legacy.sendWhatsApp(target.phoneNumberId, target.chatId, text);
     case 'openwa': {
       const openwa = require('./openwa');
-      return openwa.sendText(target.sessionId, target.chatId, text);
+      return openwa.sendText(target.sessionId, target.chatId, text, { mentions: target.mentions });
     }
     case 'messenger':
     case 'instagram':
@@ -162,7 +170,9 @@ async function sendOneTemplate(channel, target, text, template, legacy) {
   if (channel === 'openwa') {
     // OpenWA sessions are personal-number sessions: no template namespace.
     const openwa = require('./openwa');
-    return openwa.sendText(target.sessionId, target.chatId, `${template.name}: ${text}`.slice(0, 4000));
+    return openwa.sendText(target.sessionId, target.chatId, `${template.name}: ${text}`.slice(0, 4000), {
+      mentions: target.mentions,
+    });
   }
   return legacy.sendWhatsAppTemplate(target.phoneNumberId, target.chatId, template, text);
 }
