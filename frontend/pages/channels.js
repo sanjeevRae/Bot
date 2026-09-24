@@ -40,6 +40,7 @@ export default function Channels() {
   const [openwa, setOpenwa] = useState(null);
   const [owaSession, setOwaSession] = useState('');
   const [owaChatId, setOwaChatId] = useState('');
+  const [diag, setDiag] = useState(null);
   // V11 bot-token channels
   const [tgToken, setTgToken] = useState('');
   const [viberToken, setViberToken] = useState('');
@@ -121,6 +122,28 @@ export default function Channels() {
     try {
       await api('/api/org/openwa/settings', { method: 'POST', body: JSON.stringify({ groupRepliesEnabled: next }) });
       await loadOpenwa();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  // Pulls the last inbound decisions + live gateway facts, so "it did not answer
+  // in the group" is answerable without the server logs.
+  async function loadDiagnostics() {
+    setBusy(true); setError('');
+    try {
+      const d = await api('/api/org/openwa/diagnostics');
+      setDiag(d.diagnostics || null);
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
+  // Plain text into a group JID — proves the send path without waiting for a
+  // mention, which is exactly what a silent bot needs to rule out first.
+  async function testGroup(chatId) {
+    setBusy(true); setError('');
+    try {
+      await api('/api/org/openwa/test', { method: 'POST', body: JSON.stringify({ chatId }) });
+      setError('Test message sent to that group.');
     } catch (e) { setError(e.message); }
     setBusy(false);
   }
@@ -241,6 +264,7 @@ export default function Channels() {
             <div className="flex flex-wrap gap-2">
               <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
               <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>
+              <button onClick={loadDiagnostics} disabled={busy} className="btn-secondary !py-2 text-xs">Diagnose group replies</button>
             </div>
             <label className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3.5 py-3">
               <input
@@ -259,6 +283,34 @@ export default function Channels() {
                 </span>
               </span>
             </label>
+
+            {diag && (
+              <div className="rounded-lg border border-gray-100 bg-gray-50/60 p-3.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[13px] font-medium text-ink-700">Group-reply diagnostics</p>
+                  <div className="flex items-center gap-3">
+                    <button onClick={loadDiagnostics} disabled={busy} className="text-[12px] font-medium text-brand-600 hover:text-brand-700">Refresh</button>
+                    <button onClick={() => setDiag(null)} className="text-[12px] text-ink-400 hover:text-ink-600">Hide</button>
+                  </div>
+                </div>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-white p-3 font-mono text-[11px] leading-relaxed text-ink-600">{JSON.stringify(diag, null, 2)}</pre>
+                {Array.isArray(diag.groups) && diag.groups.length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-xs text-ink-500">
+                      Groups this number is in — “Send test” posts a plain message, no mention needed:
+                    </p>
+                    <ul className="space-y-1">
+                      {diag.groups.map((g) => (
+                        <li key={g.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate font-mono text-[11px] text-ink-600">{g.name || '(unnamed)'} · {g.id}</span>
+                          <button onClick={() => testGroup(g.id)} disabled={busy} className="btn-secondary !py-1 !px-2 text-[11px]">Send test</button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             {!openwa.baseUrlConfigured && (
               <p className="text-xs text-amber-600">OpenWA is not configured on the backend (OPENWA_BASE_URL missing).</p>
             )}

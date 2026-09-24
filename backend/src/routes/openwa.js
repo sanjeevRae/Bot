@@ -6,7 +6,8 @@ const { requireAuth } = require('../middleware/auth');
 const openwa = require('../services/openwa');
 const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
-const { planInbound } = require('../lib/openwaInbound');
+const { planInbound, describeInbound, digitsOf } = require('../lib/openwaInbound');
+const diag = require('../lib/openwaDiagnostics');
 
 // ============================================================
 // OpenWA ⇄ Chitra integration
@@ -146,34 +147,45 @@ async function handleOpenwaEvent(payload) {
     console.warn('[OpenWA] Could not resolve privacy id to a phone', { from: senderRaw });
   }
 
-  // The session's own number is what turns "somebody was mentioned" into "THIS
-  // bot was mentioned" inside a group (cached — see services/openwa.js).
-  const ownDigits = await openwa.getOwnId(sessionId);
+  // The session's own identity is what turns "somebody was mentioned" into "THIS
+  // bot was mentioned" inside a group. The org's stored number is the reliable
+  // source — gateway builds only fill `phone` on some sessions — so the DB wins,
+  // and the gateway session (cached) contributes the display name plus a fallback.
+  const identity = await openwa.getOwnIdentity(sessionId);
+  const ownDigits = digitsOf(conn.phone_number) || identity.digits;
+  const ownName = identity.pushName;
+  const ownWid = ownDigits ? `${ownDigits}@c.us` : null;
 
   const plan = planInbound({
     data,
     ownDigits,
-    ownWid: ownDigits ? `${ownDigits}@c.us` : null,
+    ownWid,
+    ownName,
     groupRepliesEnabled: conn.group_replies_enabled !== false,
     senderPhone,
   });
+  const facts = describeInbound({ data, ownDigits, ownWid, ownName });
 
   if (plan.action === 'ignore') {
-    if (plan.reason === 'group-disabled' || plan.reason === 'group-not-mentioned' || plan.reason === 'own-id-unknown') {
-      // Expected on every group line that is not addressed to us: one line with
-      // the facts needed to see WHY a mention was not recognised.
-      console.log('[OpenWA] Group message ignored', {
-        sessionId,
-        reason: plan.reason,
-        chatId: data.chatId || null,
-        ownNumberKnown: Boolean(ownDigits),
-        offeredMentions: Array.isArray(data.mentionedIds) ? data.mentionedIds.length : 0,
-      });
+    if (facts.isGroup && plan.reason !== 'fromMe' && plan.reason !== 'invalid-chat') {
+      // Expected on every group line that is not addressed to us: one log line and
+      // one diagnostics record carrying the facts that explain the decision.
+      console.log('[OpenWA] Group message ignored', { sessionId, reason: plan.reason, ...facts });
     } else if (plan.reason !== 'fromMe') {
       console.warn('[OpenWA] Inbound ignored', { sessionId, reason: plan.reason });
     }
+    diag.record({ kind: 'inbound', action: 'ignore', reason: plan.reason, sessionId, ...facts });
     return;
   }
+
+  diag.record({
+    kind: 'inbound',
+    action: 'handle',
+    sessionId,
+    sessionKey: plan.sessionKey,
+    replyTo: plan.chatId,
+    ...facts,
+  });
 
   console.log('[OpenWA] Incoming message', {
     event, sessionId, from: plan.senderJid, group: plan.isGroup, type: data.type,
@@ -408,6 +420,70 @@ orgRouter.post('/settings', requireAuth, async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   res.json({ ok: true, groupRepliesEnabled: patch.group_replies_enabled !== false });
+});
+
+// GET /api/org/openwa/diagnostics — why a message did or did not get a reply.
+// Built for the owner, not for logs: it answers the group question directly
+// (is the bot mentioned? is the webhook filtered? can we even send to a group?)
+// using live gateway state plus the recent in-memory decisions.
+orgRouter.get('/diagnostics', requireAuth, async (req, res) => {
+  const { data: conn, error } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .select('*')
+    .eq('organization_id', req.orgId)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+
+  const sessionId = conn?.openwa_session_id || '';
+  const out = {
+    configured: { baseUrl: !!config.openwa.baseUrl, apiKey: !!config.openwa.apiKey },
+    // The toggle column only exists once migration_v12 has been run.
+    migrationV12Applied: !!conn && Object.prototype.hasOwnProperty.call(conn, 'group_replies_enabled'),
+    connection: conn
+      ? {
+        sessionId,
+        status: conn.status,
+        storedNumber: conn.phone_number || null, // what mention matching trusts
+        groupRepliesEnabled: conn.group_replies_enabled !== false,
+      }
+      : null,
+    gatewaySession: null,
+    webhooks: null,
+    groups: null,
+    recentDecisions: diag.list(15),
+  };
+
+  if (sessionId) {
+    try {
+      const live = await openwa.getSession(sessionId);
+      out.gatewaySession = {
+        status: live?.status || null,
+        phone: live?.phone || null,
+        pushName: live?.pushName || null,
+        engineLoaded: live?.engineLoaded ?? null,
+      };
+    } catch (e) {
+      out.gatewaySession = { error: e.message };
+    }
+    try {
+      const hooks = await openwa.listWebhooks(sessionId);
+      const rows = Array.isArray(hooks) ? hooks : (hooks?.webhooks || []);
+      // `filters` is the interesting one: a filter like { isGroup: false } would
+      // stop group messages before they ever reach this backend.
+      out.webhooks = rows.map((h) => ({
+        url: h.url || null, events: h.events || null, active: h.active ?? null, filters: h.filters ?? null,
+      }));
+    } catch (e) {
+      out.webhooks = { error: e.message };
+    }
+    try {
+      out.groups = await openwa.listGroups(sessionId);
+    } catch (e) {
+      out.groups = { error: e.message };
+    }
+  }
+
+  res.json({ ok: true, diagnostics: out });
 });
 
 // POST /api/org/openwa/disconnect — mark the org's connection disconnected (keep audit row)

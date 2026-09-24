@@ -61,29 +61,61 @@ function isOwnId(entry, ownDigits, ownWid) {
 }
 
 /**
- * Was this session mentioned? The structured list is authoritative (`mentionedIds`
- * on WhatsApp Web builds, `mentions` on some others); the body token is the
- * fallback, because a build that omits the list still renders "@<number>" in the
- * text. `ownWid`/`ownDigits` come from the session's own phone number.
+ * Mentions rendered as "@<display name>" — some gateway builds (and some
+ * WhatsApp clients) put the contact's name in the body instead of the number.
+ * Word-boundary guarded so "@Chitra AI ltd" does not match "Chitra".
  */
-function mentionedOwnId(data, ownDigits, ownWid) {
-  if (!ownDigits && !ownWid) return false;
-  const lists = [data?.mentionedIds, data?.mentions];
-  for (const list of lists) {
-    if (Array.isArray(list) && list.some((entry) => isOwnId(entry, ownDigits, ownWid))) return true;
-  }
-  return ownDigits ? mentionTokens(data?.body).includes(String(ownDigits)) : false;
+function nameMentioned(body, ownName) {
+  const name = String(ownName || '').trim();
+  if (!name) return false;
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`@${escaped}(?=\\s|$|[,.!?])`, 'i').test(String(body || ''));
 }
 
 /**
- * Remove the bot's own `@<number>` token so the model receives a plain question
- * instead of a stray mention token. Digit-guarded (`(?=\D|$)`) so a longer number
- * that merely starts with ours is left alone.
+ * How (if at all) this payload points at this session's own identity:
+ * 'mentionedIds' | 'mentions' | 'body-number' | 'body-name' | null.
+ * The structured lists are authoritative; the body checks are the fallback for
+ * builds that omit them. Single source of truth for both the decision and the
+ * diagnostics endpoint.
  */
-function stripOwnMention(body, ownDigits) {
+function matchedBy(data, ownDigits, ownWid, ownName = null) {
+  const lists = [['mentionedIds', data?.mentionedIds], ['mentions', data?.mentions]];
+  for (const [key, list] of lists) {
+    if (Array.isArray(list) && list.some((entry) => isOwnId(entry, ownDigits, ownWid))) return key;
+  }
+  if (ownDigits && mentionTokens(data?.body).includes(String(ownDigits))) return 'body-number';
+  if (ownName && nameMentioned(data?.body, ownName)) return 'body-name';
+  return null;
+}
+
+/**
+ * Was this session mentioned? `ownWid`/`ownDigits`/`ownName` come from the
+ * session's own number and display name.
+ */
+function mentionedOwnId(data, ownDigits, ownWid, ownName = null) {
+  if (!ownDigits && !ownWid && !ownName) return false;
+  return matchedBy(data, ownDigits, ownWid, ownName) !== null;
+}
+
+/**
+ * Remove the bot's own mention — the `@<number>` token and/or the `@<name>`
+ * form — so the model receives a plain question instead of a stray token. The
+ * digit guard (`(?=\D|$)`) keeps a longer number that merely starts with ours.
+ */
+function stripOwnMention(body, ownDigits, ownName = null) {
   let out = String(body || '');
   if (ownDigits) out = out.replace(new RegExp(`@${ownDigits}(?=\\D|$)`, 'g'), ' ');
-  return out.replace(/\s{2,}/g, ' ').trim();
+  const name = String(ownName || '').trim();
+  if (name) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`@${escaped}(?=\\s|$|[,.!?])`, 'gi'), ' ');
+  }
+  // "@Bot, price?" leaves a stray separator once the mention is gone.
+  return out
+    .replace(/^[\s,;:.!?–—-]+/, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 }
 
 /**
@@ -93,6 +125,8 @@ function stripOwnMention(body, ownDigits) {
  * @param {object} args.data                payload.data from the webhook
  * @param {string|null} args.ownDigits      the session's own number (session.phone)
  * @param {string|null} args.ownWid         `${ownDigits}@c.us`, when known
+ * @param {string|null} args.ownName        the session's WhatsApp display name,
+ *                                          for builds that render "@<name>"
  * @param {boolean} args.groupRepliesEnabled org setting (V12)
  * @param {string|null} args.senderPhone    phone digits for a `@lid` sender, resolved
  *                                          by the caller (null when unknown)
@@ -101,7 +135,9 @@ function stripOwnMention(body, ownDigits) {
  *            sessionKey:string, remoteId:string, mentionPrefix:string|null,
  *            mentions:string[]|null, body:string, profileName:string|null}}
  */
-function planInbound({ data, ownDigits = null, ownWid = null, groupRepliesEnabled = false, senderPhone = null } = {}) {
+function planInbound({
+  data, ownDigits = null, ownWid = null, ownName = null, groupRepliesEnabled = false, senderPhone = null,
+} = {}) {
   const payload = data && typeof data === 'object' ? data : {};
   // Our own outbound echoes.
   if (payload.fromMe) return { action: 'ignore', reason: 'fromMe' };
@@ -137,10 +173,10 @@ function planInbound({ data, ownDigits = null, ownWid = null, groupRepliesEnable
 
   // ---------------- group message ----------------
   if (!groupRepliesEnabled) return { action: 'ignore', reason: 'group-disabled' };
-  // Without our own number we cannot tell "the bot was mentioned" from "someone
+  // Without our own identity we cannot tell "the bot was mentioned" from "someone
   // else was", and answering unrelated chatter is worse than staying silent.
-  if (!ownDigits && !ownWid) return { action: 'ignore', reason: 'own-id-unknown' };
-  if (!mentionedOwnId(payload, ownDigits, ownWid)) {
+  if (!ownDigits && !ownWid && !ownName) return { action: 'ignore', reason: 'own-id-unknown' };
+  if (!mentionedOwnId(payload, ownDigits, ownWid, ownName)) {
     return { action: 'ignore', reason: 'group-not-mentioned' };
   }
 
@@ -168,8 +204,31 @@ function planInbound({ data, ownDigits = null, ownWid = null, groupRepliesEnable
     remoteId: authorDigits || groupDigits,
     mentionPrefix: tagDigits ? `@${tagDigits}` : null,
     mentions: tagDigits ? [`${tagDigits}@c.us`] : null,
-    body: stripOwnMention(body, ownDigits) || EMPTY_MENTION_PROMPT,
+    body: stripOwnMention(body, ownDigits, ownName) || EMPTY_MENTION_PROMPT,
     profileName,
+  };
+}
+
+/**
+ * Everything the diagnostics endpoint needs to explain a group decision, kept
+ * out of `planInbound` so the policy function stays a plain decision.
+ */
+function describeInbound({ data, ownDigits = null, ownWid = null, ownName = null } = {}) {
+  const payload = data && typeof data === 'object' ? data : {};
+  const listed = []
+    .concat(Array.isArray(payload.mentionedIds) ? payload.mentionedIds : [])
+    .concat(Array.isArray(payload.mentions) ? payload.mentions : []);
+  return {
+    chatId: payload.chatId || payload.from || null,
+    isGroup: payload.isGroup === true || isGroupChat(payload.chatId || payload.from),
+    ownNumber: ownDigits || null,
+    ownName: ownName || null,
+    // What the gateway actually offered, so a miss is explainable (capped — this
+    // is a debugging aid, not a transcript).
+    offeredMentions: listed.map(String).slice(0, 5),
+    bodyMentions: mentionTokens(payload.body).slice(0, 5),
+    bodyPreview: String(payload.body || '').slice(0, 80),
+    matchedBy: matchedBy(payload, ownDigits, ownWid, ownName),
   };
 }
 
@@ -181,7 +240,10 @@ module.exports = {
   normalizeWid,
   mentionTokens,
   isOwnId,
+  nameMentioned,
+  matchedBy,
   mentionedOwnId,
   stripOwnMention,
   planInbound,
+  describeInbound,
 };

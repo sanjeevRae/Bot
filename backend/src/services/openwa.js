@@ -1,4 +1,5 @@
 const config = require('../config');
+const diag = require('../lib/openwaDiagnostics');
 
 /**
  * OpenWA client — thin wrapper over the self-hosted OpenWA WhatsApp gateway REST API.
@@ -104,15 +105,29 @@ async function getQr(sessionId) {
  */
 async function sendText(sessionId, chatId, text, opts = {}) {
   const mentions = Array.isArray(opts.mentions) ? opts.mentions.filter(Boolean) : [];
-  return request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`, {
-    method: 'POST',
-    body: {
-      chatId,
-      text,
-      ...(mentions.length ? { mentions } : {}),
-      ...(opts.quotedMessageId ? { quotedMessageId: opts.quotedMessageId } : {}),
-    },
-  });
+  const isGroup = String(chatId || '').endsWith('@g.us');
+  try {
+    const result = await request(`/api/sessions/${encodeURIComponent(sessionId)}/messages/send-text`, {
+      method: 'POST',
+      body: {
+        chatId,
+        text,
+        ...(mentions.length ? { mentions } : {}),
+        ...(opts.quotedMessageId ? { quotedMessageId: opts.quotedMessageId } : {}),
+      },
+    });
+    // Group sends are both rare and the most likely thing to break, so the outcome
+    // is remembered for GET /api/org/openwa/diagnostics.
+    if (isGroup) {
+      diag.record({ kind: 'send', chatId, mentions: mentions.length, ok: true, chars: String(text || '').length });
+    }
+    return result;
+  } catch (err) {
+    if (isGroup) {
+      diag.record({ kind: 'send', chatId, mentions: mentions.length, ok: false, error: err.message });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -198,6 +213,24 @@ async function listWebhooks(sessionId) {
 }
 
 /**
+ * Groups this session is a member of, normalised to `{ id, name, participants }`.
+ * Gateways differ on the envelope (`[]`, `{ groups: [] }`, `{ data: [] }`) and on
+ * the field names, so every known shape is accepted and unknown ones are dropped
+ * rather than surfaced as broken rows.
+ */
+async function listGroups(sessionId) {
+  const data = await request(`/api/sessions/${encodeURIComponent(sessionId)}/groups`);
+  const rows = Array.isArray(data)
+    ? data
+    : (data && (data.groups || data.data)) || [];
+  return rows.slice(0, 50).map((g) => ({
+    id: g.id || g.groupId || g.chatId || null,
+    name: g.name || g.subject || g.title || null,
+    participants: Array.isArray(g.participants) ? g.participants.length : (g.participantCount ?? null),
+  })).filter((g) => g.id);
+}
+
+/**
  * Resolve a privacy-id sender (`@lid`) to its real phone digits.
  * Returns the phone digits (e.g. "9779810135468") or null when unmappable.
  * Used because WhatsApp increasingly delivers senders as `@lid` JIDs that
@@ -216,40 +249,51 @@ async function resolvePhone(sessionId, contactId) {
 }
 
 // ------------------------------------------------------------------
-// The session's own number, needed to tell "this bot was @-mentioned in the
-// group" from "somebody else was". `GET /sessions/:id` exposes it as `phone`.
-// One lookup is cached because a chatty group would otherwise ask the gateway
-// on every message; failures get a short TTL so a down gateway is not hammered.
-// Callers treat null as "mentions cannot be verified": group messages are then
-// ignored rather than answered on a guess (see lib/openwaInbound.js).
+// The session's own identity, needed to tell "this bot was @-mentioned in the
+// group" from "somebody else was". `GET /sessions/:id` exposes the linked number
+// as `phone` and the WhatsApp display name as `pushName` (some builds render a
+// mention as "@<name>" instead of "@<number>").
+// One lookup is cached because a chatty group would otherwise ask the gateway on
+// every message; failures get a short TTL so a down gateway is not hammered.
+// Callers treat an empty result as "mentions cannot be verified": group messages
+// are then ignored rather than answered on a guess (see lib/openwaInbound.js) —
+// which is why routes/openwa.js prefers the org's stored number over this.
 // ------------------------------------------------------------------
 const ownIdCache = new Map();
 const OWN_ID_TTL_MS = 10 * 60 * 1000;
 const OWN_ID_FAIL_TTL_MS = 60 * 1000;
 
-async function getOwnId(sessionId) {
+async function getOwnIdentity(sessionId) {
   const hit = ownIdCache.get(sessionId);
-  if (hit && Date.now() - hit.at < hit.ttl) return hit.digits;
+  if (hit && Date.now() - hit.at < hit.ttl) return { digits: hit.digits, pushName: hit.pushName };
 
   let digits = null;
+  let pushName = null;
   try {
     const session = await getSession(sessionId);
     const phone = session && (session.phone || session.phoneNumber);
     digits = phone ? String(phone).replace(/\D/g, '') || null : null;
+    pushName = (session && typeof session.pushName === 'string' && session.pushName.trim()) || null;
   } catch (err) {
-    console.warn('[openwa] own-number lookup failed:', err.message);
+    console.warn('[openwa] own-identity lookup failed:', err.message);
   }
 
   ownIdCache.set(sessionId, {
     digits,
+    pushName,
     at: Date.now(),
-    ttl: digits ? OWN_ID_TTL_MS : OWN_ID_FAIL_TTL_MS,
+    ttl: digits || pushName ? OWN_ID_TTL_MS : OWN_ID_FAIL_TTL_MS,
   });
   if (ownIdCache.size > 500) {
     const now = Date.now();
     for (const [key, entry] of ownIdCache) if (now - entry.at >= entry.ttl) ownIdCache.delete(key);
   }
-  return digits;
+  return { digits, pushName };
+}
+
+/** Digits of the session's own number, or null when the gateway does not expose it. */
+async function getOwnId(sessionId) {
+  return (await getOwnIdentity(sessionId)).digits;
 }
 
 module.exports = {
@@ -266,6 +310,8 @@ module.exports = {
   downloadMedia,
   registerWebhook,
   listWebhooks,
+  listGroups,
   resolvePhone,
   getOwnId,
+  getOwnIdentity,
 };
