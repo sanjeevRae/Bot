@@ -712,7 +712,10 @@ orgRouter.post('/disconnect', requireAuth, async (req, res) => {
   res.json({ ok: true, ...(await waMode.statusFor(conn?.openwa_session_id || '')) });
 });
 
-// POST /api/org/openwa/reconnect — ask OpenWA to start (reconnect) the org's session
+// POST /api/org/openwa/reconnect — bring the org's session back. The gateway is
+// the source of truth for whether WhatsApp itself is linked; our row only records
+// the owner's switch. In particular a session that is *already started* is success,
+// not an error (previously it 502'd and the row stayed 'disconnected' forever).
 orgRouter.post('/reconnect', requireAuth, async (req, res) => {
   const { data: conn, error } = await supabaseAdmin
     .from('whatsapp_connections')
@@ -724,7 +727,7 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
 
   let result;
   try {
-    result = await openwa.startSession(conn.openwa_session_id);
+    result = await ensureSessionLive(conn.openwa_session_id);
   } catch (e) {
     return res.status(502).json({ error: `Failed to start OpenWA session: ${e.message}` });
   }
@@ -733,8 +736,40 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
     .update({ status: 'connected', updated_at: new Date().toISOString() })
     .eq('organization_id', req.orgId);
   waMode.invalidate(conn.openwa_session_id);
-  res.json({ ok: true, result, ...(await waMode.statusFor(conn.openwa_session_id)) });
+  res.json({ ok: true, result: result.detail, ...(await waMode.statusFor(conn.openwa_session_id)) });
 });
+
+/**
+ * Start the gateway session if it needs starting, without failing when it is
+ * already up. Asks the gateway first (a live check never disturbs anything),
+ * then calls /start only when needed — and treats "already started" as success,
+ * because that state is exactly what Reconnect is trying to reach. A session
+ * that is genuinely broken (QR needed, unknown id) still throws, so /reconnect
+ * answers those with a 502 and a real message as before.
+ */
+async function ensureSessionLive(sessionId) {
+  let live = null;
+  try {
+    live = await openwa.getSession(sessionId);
+  } catch (e) {
+    console.warn('[OpenWA] session check before (re)start failed:', e.message);
+  }
+  if (waPending.statusIsReady(live && (live.status || live.state)) === true) {
+    return { live: true, detail: live };
+  }
+
+  try {
+    const started = await openwa.startSession(sessionId);
+    return { live: true, detail: started };
+  } catch (e) {
+    if (/already[\s_-]?(start|running|connect)|is already/i.test(e.message || '')) {
+      let verify = null;
+      try { verify = await openwa.getSession(sessionId); } catch { /* the start error is the answer */ }
+      return { live: true, detail: verify || 'already-started' };
+    }
+    throw e;
+  }
+}
 
 // POST /api/org/openwa/test — send a test WhatsApp message via OpenWA
 orgRouter.post('/test', requireAuth, async (req, res) => {

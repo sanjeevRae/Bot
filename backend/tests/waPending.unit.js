@@ -27,15 +27,26 @@ const express = require('express');
 
 // ---------- Gateway stub ----------
 // The OpenWA client talks to OPENWA_BASE_URL through global fetch. Intercepting
-// only that host leaves the test's own calls to the local express server alone,
-// and lets Disconnect/Reconnect be exercised for real (start → CONNECTED).
+// only that host leaves the test's own calls to the local express server alone.
+// `gateway.status` / `gateway.startError` are scripted per check: the point under
+// test is that Reconnect follows the gateway's truth instead of forcing /start.
 const realFetch = global.fetch;
-const gateway = { calls: [], session: { status: 'CONNECTED', phone: '9779712039906', pushName: 'Chitra AI' } };
+const gateway = {
+  calls: [],
+  status: 'CONNECTED',   // what GET /api/sessions/:id reports
+  startError: null,      // when set, POST .../start fails with this message
+  session: { phone: '9779712039906', pushName: 'Chitra AI' },
+};
 global.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith('http://openwa.test')) {
-    gateway.calls.push(`${(opts && opts.method) || 'GET'} ${u}`);
-    return { ok: true, status: 200, text: async () => JSON.stringify(gateway.session) };
+    const method = (opts && opts.method) || 'GET';
+    gateway.calls.push(`${method} ${u}`);
+    if (u.endsWith('/start') && gateway.startError) {
+      return { ok: false, status: 409, text: async () => JSON.stringify({ message: gateway.startError }) };
+    }
+    const body = u.endsWith('/start') ? {} : { ...gateway.session, status: gateway.status };
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
   }
   return realFetch(url, opts);
 };
@@ -504,7 +515,7 @@ const server = app.listen(0, async () => {
     config.openwa.autoReply = false;
     waMode.invalidate(SESSION);
 
-    // ==================== 10. Disconnect must actually stay disconnected ====================
+    // ============ 10. Disconnect must actually stay disconnected ============
     // Reported bug: clicking Disconnect left the card saying "Connected", because
     // `connected` only meant "a session id is saved". Now the owner's soft switch
     // decides the badge AND stops the backend from answering.
@@ -539,17 +550,53 @@ const server = app.listen(0, async () => {
     check('the pending feed reports muse mode while the backend is switched off',
       (await pending()).mode === 'muse');
 
+    // The gateway is already up (the owner's switch is what is off): Reconnect
+    // reconciles the row instead of blindly forcing /start — the exact failure
+    // the user hit ("Session is already started" → 502 → row stuck at
+    // 'disconnected' forever).
+    gateway.status = 'CONNECTED';
+    const startsBefore = gateway.calls.filter((c) => c.includes('/start')).length;
     d = await (await fetch(`${base}/api/org/openwa/reconnect`, { method: 'POST' })).json();
-    check('POST /reconnect brings the session back with the switch still saved on',
+    check('POST /reconnect on an already-started session succeeds without forcing /start',
       d.ok === true && d.mode === 'bot' && d.autoReply === true && d.autoReplySuspended === false,
       JSON.stringify(d));
-    check('reconnect really asked the gateway to start the session',
-      gateway.calls.some((c) => c.includes('/start')), gateway.calls.join(' | '));
+    check('reconnect asked the gateway first and skipped /start when it was already up',
+      gateway.calls.some((c) => c.includes(`/api/sessions/${SESSION}`) && !c.includes('/start'))
+      && gateway.calls.filter((c) => c.includes('/start')).length === startsBefore,
+      gateway.calls.join(' | '));
 
     st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
     check('/status: connected again after Reconnect',
       st.connected === true && st.disconnectedByOwner === false && st.mode === 'bot',
       JSON.stringify(st));
+
+    // ...but when the gateway really is down, /start is called exactly once.
+    fakeSupabase.rowStatus = 'disconnected';
+    waMode.invalidate(SESSION);
+    gateway.status = 'STOPPED';
+    const startsDown = gateway.calls.filter((c) => c.includes('/start')).length;
+    d = await (await fetch(`${base}/api/org/openwa/reconnect`, { method: 'POST' })).json();
+    check('POST /reconnect calls /start exactly once when the gateway is down',
+      d.ok === true && d.mode === 'bot'
+      && gateway.calls.filter((c) => c.includes('/start')).length === startsDown + 1,
+      JSON.stringify(d));
+
+    // ...and a broken session still 502s with the real message instead of
+    // silently flipping the row to 'connected'.
+    fakeSupabase.rowStatus = 'disconnected';
+    waMode.invalidate(SESSION);
+    gateway.startError = 'Session 03bc39c2 does not exist';
+    const fails = await fetch(`${base}/api/org/openwa/reconnect`, { method: 'POST' });
+    const failBody = await fails.json();
+    check('POST /reconnect fails honestly (502 + gateway message) when the session is broken',
+      fails.status === 502 && /does not exist/.test(failBody.error || ''), JSON.stringify(failBody));
+    gateway.startError = null;
+    st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
+    check('a failed reconnect leaves the row disconnected (no false green)',
+      st.connected === false && st.disconnectedByOwner === true, JSON.stringify(st));
+
+    fakeSupabase.rowStatus = 'connected';
+    waMode.invalidate(SESSION);
 
     const beforeOn = fakeSupabase.orgLookups;
     await deliver(incoming(CHAT_A));

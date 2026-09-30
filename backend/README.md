@@ -128,8 +128,12 @@ session still records everything for Muse.
 `whatsapp_connections.status = 'disconnected'` and keeps the mapping, so the card shows
 **Disconnected**, offers **Reconnect**, and *stops the backend answering* — neither Chitra mode
 nor a saved-auto-reply toggle can send while it is off (the toggle then reads *saved on, but
-suspended*). **Reconnect** calls OpenWA's `POST /sessions/{id}/start`, writes `status = 'connected'`
-and answering resumes. Both invalidate the cached mode immediately, so the next message follows
+suspended*). **Reconnect** reconciles with the gateway — it checks the live session first and
+only calls OpenWA's `POST /sessions/{id}/start` when the session is actually down (so an
+already-started session reports success instead of 502 "already started" and leaving the row
+stuck at 'disconnected'); then it writes `status = 'connected'` and answering resumes. A
+genuinely broken session still 502s with the gateway's own message, and the row stays
+'disconnected'. Both invalidate the cached mode immediately, so the next message follows
 the switch, not a 30-second timer.
 
 ### Flow
