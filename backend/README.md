@@ -45,6 +45,7 @@ Run `supabase/schema.sql` in the Supabase SQL Editor once. It creates all tables
 | POST | `/api/org/openwa/connect` | JWT | Verify + connect an OpenWA session |
 | POST | `/api/org/openwa/disconnect` | JWT | Disconnect the org's OpenWA session |
 | POST | `/api/org/openwa/reconnect` | JWT | Ask OpenWA to (re)start the org's session |
+| POST | `/api/org/openwa/settings` | JWT | Per-org WhatsApp behaviour: `{ groupRepliesEnabled }` (V12), `{ autoReply }` (V13) |
 | POST | `/api/org/openwa/test` | JWT | Send a test WhatsApp message via OpenWA |
 | POST | `/api/webhooks/openwa` | HMAC (signed) | Inbound OpenWA webhook (message.received) |
 | GET | `/wa-pending` (and `/api/wa-pending`) | public | Pending WhatsApp counts for Muse's event hook (no message content) |
@@ -79,7 +80,7 @@ Customer WhatsApp → OpenWA session (your machine)
 | `OPENWA_BASE_URL` | `http://localhost:2785` | `https://wa.<your-domain>` (tunnel) |
 | `OPENWA_API_KEY` | OpenWA `X-API-Key` | same |
 | `OPENWA_WEBHOOK_SECRET` | ≥16-char string | same (both sides) |
-| `WHATSAPP_AUTO_REPLY` | `off` (default) | `off` = Muse answers, `on` = this backend answers |
+| `WHATSAPP_AUTO_REPLY` | `off` (default) | `off` = the Channels toggle decides; `on` = force this backend to answer |
 
 All three are **server-only** — never exposed to the browser.
 
@@ -98,15 +99,25 @@ The backend auto-registers the webhook on `POST /api/org/openwa/connect` pointin
 
 ---
 
-## Muse mode — event-driven WhatsApp (`WHATSAPP_AUTO_REPLY`)
+## Muse mode — event-driven WhatsApp (`WHATSAPP_AUTO_REPLY` + the Channels toggle)
 
 Instead of this backend answering WhatsApp itself, **Muse** (the external agent) can own the
-replies. The switch is one env var and nothing was deleted:
+replies. Two layers, so the owner gets a switch and ops keeps a rollback:
 
-| `WHATSAPP_AUTO_REPLY` | Who replies | What the backend does |
+1. **The Channels page toggle** — *Answer WhatsApp from Chitra* (on the WhatsApp (OpenWA)
+   card). Stored per org as `whatsapp_connections.auto_reply_enabled`
+   (**run [`supabase/migration_v13_openwa_auto_reply.sql`](./supabase/migration_v13_openwa_auto_reply.sql)
+   once**; until then the backend stays in Muse mode and the toggle says which file to run).
+2. **`WHATSAPP_AUTO_REPLY=on`** — the ops override. It forces this backend to answer for every
+   org whatever the dashboard says, so an emergency rollback is still one flag flip. The
+   toggle is disabled and labelled *forced by server config* in that case.
+
+| Mode | Who replies | What the backend does |
 |---|---|---|
-| `off` *(default)* | Muse | Never replies. Counts incoming messages per chat, serves `GET /wa-pending`, clears a chat when Muse's own outgoing message is seen. |
-| `on` | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing is counted for Muse. |
+| Muse *(default: toggle off)* | Muse | Never replies. Counts incoming messages per chat, serves `GET /wa-pending`, clears a chat when Muse's own outgoing message is seen. |
+| Chitra *(toggle on)* | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing is counted for Muse. |
+
+Switching to Chitra clears the pending list, because Muse is no longer answering that session.
 
 ### Flow
 ```
@@ -148,4 +159,5 @@ no deploy of old code.
 ### Test
 `npm run test:unit` (from `backend/`) drives the whole contract offline — no credentials, no
 gateway, no DB: signed webhook in, pending counted, outbound echo clears it, readiness flips
-on lifecycle events.
+on lifecycle events, the dashboard toggle routes messages back to the reply pipeline, and a
+deploy without migration_v13 stays safely in Muse mode.

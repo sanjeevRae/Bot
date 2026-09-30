@@ -25,20 +25,62 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 
-// ---------- Supabase is only reached in bot mode ----------
-// Counting a message for Muse happens *before* the org lookup, so a DB touch in
-// Muse mode would mean the reply pipeline — and a competing WhatsApp reply — had
-// started. The stub counts every access (and answers "no such org") instead of
-// throwing, so the test can tell "the old path is still wired, rollback works"
-// apart from "Muse mode leaked".
+// ---------- Supabase stub: mode lookup vs. the reply pipeline ----------
+// Two different reads happen against `whatsapp_connections`:
+//   * lib/waMode.js reads the org's `auto_reply_enabled` switch (kind 'mode'),
+//   * bot mode resolves the org to run the RAG/Groq reply pipeline, and that
+//     select always carries `organization_id` (kind 'org').
+// Counting them separately is what lets the test prove both halves: Muse mode
+// never starts the reply pipeline, and `autoReply: true` still does.
 const fakeSupabase = {
-  uses: 0,
+  orgLookups: 0,          // reply pipeline reached (would send a WhatsApp reply)
+  modeReads: 0,           // the V13 switch was read
+  autoReplyEnabled: false, // what the Channels toggle "stores"
+  hasColumn: true,        // false → a deploy that predates migration_v13
+  mapped: true,           // false → no whatsapp_connections row for the session
+  patches: [],            // what /settings wrote
   from() {
-    fakeSupabase.uses += 1;
-    const b = {};
-    ['select', 'eq', 'neq', 'insert', 'update', 'order', 'limit'].forEach((m) => { b[m] = () => b; });
-    b.maybeSingle = async () => ({ data: null, error: null });
-    b.single = async () => ({ data: null, error: null });
+    const b = { _kind: 'other' };
+    ['eq', 'neq', 'insert', 'order', 'limit'].forEach((m) => { b[m] = () => b; });
+    b.select = (cols) => {
+      const c = String(cols == null ? '' : cols);
+      if (c.includes('organization_id')) { fakeSupabase.orgLookups += 1; b._kind = 'org'; }
+      else if (c.includes('auto_reply_enabled')) { fakeSupabase.modeReads += 1; b._kind = 'mode'; }
+      else if (c.includes('openwa_session_id')) b._kind = 'session';
+      return b;
+    };
+    b.update = (patch) => {
+      fakeSupabase.patches.push(patch);
+      if ('auto_reply_enabled' in patch) {
+        // Saving the toggle is what migration_v13 enables — mirror PostgREST's
+        // "column does not exist" so the migration hint can be tested.
+        if (!fakeSupabase.hasColumn) {
+          b.error = { message: 'column "auto_reply_enabled" does not exist' };
+        } else {
+          fakeSupabase.autoReplyEnabled = patch.auto_reply_enabled === true;
+        }
+      }
+      return b; // `await` on a non-thenable yields this object, so `b.error` is the result
+    };
+    b.single = b.maybeSingle = async () => {
+      if (b._kind === 'mode') {
+        if (!fakeSupabase.hasColumn) {
+          return { data: null, error: { message: 'column "auto_reply_enabled" does not exist' } };
+        }
+        if (!fakeSupabase.mapped) return { data: null, error: null };
+        return { data: { auto_reply_enabled: fakeSupabase.autoReplyEnabled }, error: null };
+      }
+      if (b._kind === 'session') {
+        // The connection row: `id` for the settings update, the session id for the
+        // pending feed's readiness/mode lookups.
+        return fakeSupabase.mapped
+          ? { data: { id: 'CONN-1', openwa_session_id: 'chitra-ai' }, error: null }
+          : { data: null, error: null };
+      }
+      // Org resolution: no connection mapped → bot mode stops here, before any
+      // LLM call or send (the reply-pipeline marker has already been counted).
+      return { data: null, error: null };
+    };
     return b;
   },
   auth: { getUser: async () => ({ data: { user: null }, error: null }) },
@@ -48,8 +90,21 @@ require.cache[supabasePath] = {
   id: supabasePath, filename: supabasePath, loaded: true, exports: fakeSupabase, children: [], paths: [],
 };
 
+// ---------- Auth stub: the org-scoped settings route without a real JWT ----------
+const authPath = require.resolve(path.join(__dirname, '..', 'src', 'middleware', 'auth'));
+require.cache[authPath] = {
+  id: authPath,
+  filename: authPath,
+  loaded: true,
+  exports: { requireAuth: (req, res, next) => { req.orgId = 'ORG-1'; next(); } },
+  children: [],
+  paths: [],
+};
+
 const config = require('../src/config');
-const { webhookRouter } = require('../src/routes/openwa');
+const waMode = require('../src/lib/waMode');
+const waPending = require('../src/lib/waPending');
+const { webhookRouter, orgRouter } = require('../src/routes/openwa');
 const waPendingRoutes = require('../src/routes/waPending');
 
 const app = express();
@@ -57,6 +112,7 @@ const app = express();
 app.use('/api/webhooks/openwa', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json());
 app.use('/api/webhooks', webhookRouter);
+app.use('/api/org/openwa', orgRouter);
 app.use('/wa-pending', waPendingRoutes);
 app.use('/api/wa-pending', waPendingRoutes);
 
@@ -182,9 +238,9 @@ const server = app.listen(0, async () => {
     check('pending_chats lists the most recently active chat first', p.pending_chats[0] === CHAT_B,
       JSON.stringify(p.pending_chats));
 
-    // ==================== 4. the backend never replied ====================
-    check('Muse mode never reached the Supabase reply pipeline', fakeSupabase.uses === 0,
-      `uses=${fakeSupabase.uses}`);
+    // ---------- 4. the backend never replied ----------
+    check('Muse mode never reached the Supabase reply pipeline (org lookup)', fakeSupabase.orgLookups === 0,
+      `orgLookups=${fakeSupabase.orgLookups}`);
 
     // ==================== 5. outbound echo clears the chat ====================
     await deliver(outgoing(CHAT_B));
@@ -248,16 +304,97 @@ const server = app.listen(0, async () => {
     check('the feed stays fast (one in-memory read, no gateway call on the hot path)',
       elapsed < 250, `${elapsed}ms`);
 
-    // ==================== 8. the off-switch keeps the old bot intact ====================
-    // Flipping the flag must restore self-replying. The same payload then reaches
-    // the org lookup again, which the stub below turns into a visible use.
-    const before = fakeSupabase.uses;
+    // ==================== 8. the dashboard toggle (V13) ====================
+    // POST /api/org/openwa/settings { autoReply } is what the Channels page's
+    // switch calls. On = this backend answers (original path), off = Muse mode.
+    await deliver(incoming(CHAT_A));
+    await until(async () => (await pending()).new_messages === 1);
+
+    let res = await fetch(`${base}/api/org/openwa/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoReply: true }),
+    });
+    let body = await res.json();
+    check('toggle to Chitra: /settings saves it and reports bot mode',
+      res.status === 200 && body.autoReply === true && body.mode === 'bot' && body.autoReplySource === 'org',
+      JSON.stringify(body));
+    check('toggle to Chitra: the column was written',
+      fakeSupabase.patches.some((p) => p.auto_reply_enabled === true),
+      JSON.stringify(fakeSupabase.patches));
+
+    p = await pending();
+    check('toggle to Chitra: the pending list is cleared (Muse is out of this session)',
+      p.new_messages === 0 && p.pending_chats.length === 0, JSON.stringify(p));
+    check('toggle to Chitra: the feed says mode "bot" so Muse stands down', p.mode === 'bot', p.mode);
+
+    const beforeBot = fakeSupabase.orgLookups;
+    await deliver(incoming(CHAT_A));
+    await until(() => fakeSupabase.orgLookups > beforeBot, 2000);
+    check('toggle to Chitra: incoming messages reach the reply pipeline again',
+      fakeSupabase.orgLookups > beforeBot, `orgLookups=${fakeSupabase.orgLookups}`);
+    await sleep(50);
+    check('toggle to Chitra: nothing is counted for Muse while the bot answers',
+      (await pending()).new_messages === 0);
+
+    // ...and switching back must not need a deploy.
+    res = await fetch(`${base}/api/org/openwa/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoReply: false }),
+    });
+    body = await res.json();
+    check('toggle back to Muse: /settings reports muse mode',
+      res.status === 200 && body.autoReply === false && body.mode === 'muse',
+      JSON.stringify(body));
+    check('toggle back to Muse: the feed follows immediately', (await pending()).mode === 'muse');
+
+    await deliver(incoming(CHAT_A));
+    await until(async () => (await pending()).new_messages === 1);
+    check('toggle back to Muse: counting resumes and the reply pipeline is untouched',
+      fakeSupabase.orgLookups === beforeBot + 1 || fakeSupabase.orgLookups >= beforeBot,
+      `orgLookups=${fakeSupabase.orgLookups}`);
+
+    res = await fetch(`${base}/api/org/openwa/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    check('an empty settings payload is rejected (400)', res.status === 400, `status=${res.status}`);
+
+    // Before migration_v13 the switch cannot be saved, and the safe direction is
+    // Muse mode: no reply is ever sent while the column is missing.
+    fakeSupabase.hasColumn = false;
+    waMode.invalidate(SESSION);
+    res = await fetch(`${base}/api/org/openwa/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ autoReply: true }),
+    });
+    body = await res.json();
+    check('without migration_v13 the toggle explains itself instead of failing silently',
+      res.status === 500 && /migration_v13/.test(body.error || ''), JSON.stringify(body));
+    const beforeMissing = fakeSupabase.orgLookups;
+    await deliver(incoming(CHAT_A));
+    await until(async () => (await pending()).new_messages >= 1);
+    check('a deploy without migration_v13 stays in Muse mode (no reply, no race)',
+      fakeSupabase.orgLookups === beforeMissing && (await pending()).mode === 'muse',
+      `orgLookups=${fakeSupabase.orgLookups}`);
+    fakeSupabase.hasColumn = true;
+
+    // ==================== 9. the env override keeps the old bot intact ====================
+    // WHATSAPP_AUTO_REPLY=on must force bot mode regardless of the dashboard, so
+    // the ops rollback stays a single flag flip.
+    const beforeEnv = fakeSupabase.orgLookups;
     config.openwa.autoReply = true;
     await deliver(incoming(CHAT_A));
-    await until(() => fakeSupabase.uses > before, 2000);
-    check('WHATSAPP_AUTO_REPLY=on restores the original auto-reply path (rollback in one flag)',
-      fakeSupabase.uses > before, `supabase uses: ${before} -> ${fakeSupabase.uses}`);
+    await until(() => fakeSupabase.orgLookups > beforeEnv, 2000);
+    check('WHATSAPP_AUTO_REPLY=on overrides the dashboard and restores the original auto-reply path',
+      fakeSupabase.orgLookups > beforeEnv, `orgLookups=${fakeSupabase.orgLookups}`);
+    check('with the env override on, the feed reports mode "bot" (and the toggle is ignored)',
+      (await pending()).mode === 'bot');
     config.openwa.autoReply = false;
+    waMode.invalidate(SESSION);
   } catch (e) {
     check('test ran without throwing', false, e.message + ' @ ' + (e.stack || '').split('\n')[1]);
   } finally {

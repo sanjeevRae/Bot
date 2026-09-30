@@ -32,6 +32,7 @@
  */
 
 const config = require('../config');
+const waMode = require('./waMode');
 
 
 /** Cap on tracked chats — oldest (least recently active) are dropped first. */
@@ -293,6 +294,18 @@ async function snapshot() {
     if (readiness.ready === null && READY_WAIT_MS > 0) await Promise.race([probe, delay(READY_WAIT_MS)]);
   }
 
+  // Who replies right now (V13). Cached for WA_MODE_TTL_MS, so a poll normally
+  // costs nothing beyond memory — it exists because reporting the wrong mode
+  // would either silence Muse while the bot is off, or have her answer alongside
+  // it. A read failure resolves to Muse mode, the quiet direction.
+  let mode = config.openwa.autoReply ? 'bot' : 'muse';
+  try {
+    const sessionId = readiness.sessionId || (await lookupSessionId());
+    if (sessionId) ({ mode } = await waMode.statusFor(sessionId));
+  } catch (err) {
+    console.warn('[waPending] mode lookup failed:', err.message);
+  }
+
   return {
     new_messages: newMessages,
     pending_chats: entries.map((e) => e.chatId),
@@ -300,16 +313,20 @@ async function snapshot() {
     // not raise a false outage. A real outage is confirmed by the probe above or
     // by a lifecycle event, and shows up on the next poll.
     session_ready: readiness.ready !== false,
-    // Lets Muse stand down if the backend was switched back to self-replying
-    // (`WHATSAPP_AUTO_REPLY=on`) — both replying at once is the race this mode
-    // exists to remove.
-    mode: config.openwa.autoReply ? 'bot' : 'muse',
+    // `bot` = the backend is answering WhatsApp itself, so Muse must stand down
+    // (both replying at once is the race this mode exists to remove).
+    mode,
   };
+}
+
+/** Test hook: forget every pending count (readiness and caches are kept). */
+function clearPending() {
+  pending.clear();
 }
 
 /** Test hook: forget everything (counts, readiness, lookup cache). */
 function reset() {
-  pending.clear();
+  clearPending();
   readiness.ready = null;
   readiness.status = null;
   readiness.at = 0;
@@ -327,6 +344,7 @@ module.exports = {
   noteSessionEvent,
   snapshot,
   statusIsReady,
+  clearPending,
   reset,
 };
 

@@ -126,6 +126,17 @@ export default function Channels() {
     setBusy(false);
   }
 
+  // V13: who answers WhatsApp. On = Chitra replies itself; off = Muse mode, where
+  // the backend only counts messages and Muse answers from the pending feed.
+  async function toggleAutoReply(next) {
+    setBusy(true); setError('');
+    try {
+      await api('/api/org/openwa/settings', { method: 'POST', body: JSON.stringify({ autoReply: next }) });
+      await loadOpenwa();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
   // Pulls the last inbound decisions + live gateway facts, so "it did not answer
   // in the group" is answerable without the server logs.
   async function loadDiagnostics() {
@@ -263,22 +274,42 @@ export default function Channels() {
             </p>
             <p className="text-[13px] text-ink-500">
               Replies:{' '}
-              <span className="font-medium">{openwa.autoReply ? 'Chitra bot (backend replies)' : 'Muse (backend counts only)'}</span>
-              {!openwa.autoReply && openwa.pendingUrl && (
+              <span className="font-medium">{openwa.autoReply ? 'Chitra AI (this backend)' : 'Muse (backend counts only)'}</span>
+              {openwa.autoReplySource === 'env' && <> · forced by server config</>}
+              {openwa.pendingUrl && (
                 <>
                   {' '}· Pending feed:{' '}
                   <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{openwa.pendingUrl}</code>
                 </>
               )}
             </p>
-            {!openwa.autoReply && (
-              <p className="text-xs text-ink-400">
-                Automatic replies are off for WhatsApp: the backend only counts incoming messages and
-                publishes them on the pending feed above, which Muse polls before answering through OpenWA.
-                Set <code className="font-mono">WHATSAPP_AUTO_REPLY=on</code> on the backend to hand replies
-                back to Chitra.
-              </p>
-            )}
+            <label className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3.5 py-3">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-brand-600"
+                checked={!!openwa.autoReply}
+                disabled={busy || openwa.autoReplyForcedByEnv}
+                onChange={(e) => toggleAutoReply(e.target.checked)}
+              />
+              <span className="text-[13px] text-ink-700">
+                <span className="font-medium">Answer WhatsApp from Chitra</span>
+                <span className="mt-0.5 block text-xs text-ink-400">
+                  {openwa.autoReply
+                    ? 'Chitra replies to every incoming WhatsApp message itself, using your knowledge base and bookings. Muse stays out of the way.'
+                    : 'Off: Chitra never replies. It only counts incoming messages and publishes them on the pending feed above, which Muse polls before answering through OpenWA.'}
+                </span>
+                {openwa.autoReplyForcedByEnv && (
+                  <span className="mt-1 block text-xs text-amber-600">
+                    Forced on by the server setting WHATSAPP_AUTO_REPLY=on — this switch is ignored until that is removed.
+                  </span>
+                )}
+                {openwa.migrationV13Applied === false && (
+                  <span className="mt-1 block text-xs text-amber-600">
+                    Saving this switch needs migration_v13_openwa_auto_reply.sql — run it once in the Supabase SQL editor.
+                  </span>
+                )}
+              </span>
+            </label>
             <div className="flex flex-wrap gap-2">
               <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
               <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>

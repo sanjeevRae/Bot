@@ -8,6 +8,7 @@ const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
 const { planInbound, describeInbound, digitsOf, unownedLidMentions } = require('../lib/openwaInbound');
 const waPending = require('../lib/waPending');
+const waMode = require('../lib/waMode');
 const diag = require('../lib/openwaDiagnostics');
 
 // ============================================================
@@ -17,12 +18,18 @@ const diag = require('../lib/openwaDiagnostics');
 // Tenant isolation: the org for an inbound message is resolved from the stored
 // `whatsapp_connections` row by session id — NEVER trusted from the webhook payload.
 //
-// V13 reply modes — one switch, `WHATSAPP_AUTO_REPLY` (config.openwa.autoReply):
-//  - off (default) "Muse mode": this backend NEVER replies. Each incoming message
-//    is counted as pending (lib/waPending.js), and a chat is cleared again as soon
-//    as one of our own outbound messages to it is observed. GET /wa-pending then
-//    tells Muse's event hook when to wake up and answer through OpenWA herself.
-//  - on "bot mode": the original self-replying pipeline below, untouched.
+// V13 reply modes — who answers inbound WhatsApp. Two layers, so the owner gets a
+// dashboard switch and ops keeps a single-flag rollback:
+//  - `WHATSAPP_AUTO_REPLY=on` (config.openwa.autoReply) forces bot mode for every
+//    org, whatever the dashboard says.
+//  - otherwise the org's own `auto_reply_enabled` (the "Answer WhatsApp from
+//    Chitra" toggle on the Channels page, migration_v13) decides; off — the
+//    default — is "Muse mode": this backend NEVER replies, it only counts incoming
+//    messages (lib/waPending.js) and clears a chat as soon as one of our own
+//    outbound messages to it is observed. GET /wa-pending then tells Muse's event
+//    hook when to wake up and answer through OpenWA herself.
+// Bot mode is the original self-replying pipeline below, untouched.
+// Resolution + caching live in lib/waMode.js.
 // ============================================================
 
 const webhookRouter = express.Router();
@@ -127,8 +134,9 @@ async function handleOpenwaEvent(payload) {
     // Ignore lifecycle / other event types safely (no processing, no error).
     // Muse mode does care about two of them: a session going up/down (readiness
     // for GET /wa-pending) and an outbound echo on any event name (that clears
-    // the chat's pending entry). Both are cheap in-memory notes.
-    if (!config.openwa.autoReply) waPending.noteSessionEvent(event, sessionId, payload.data);
+    // the chat's pending entry). Both are cheap in-memory notes, and in bot mode
+    // there is simply nothing pending to clear.
+    waPending.noteSessionEvent(event, sessionId, payload.data);
     return;
   }
   if (isDuplicate(idempotencyKey)) {
@@ -139,6 +147,12 @@ async function handleOpenwaEvent(payload) {
 
   const data = payload.data;
   if (!data || typeof data !== 'object') return;
+
+  // Who answers this WhatsApp right now (V13): the org's Channels toggle unless
+  // the server's WHATSAPP_AUTO_REPLY=on overrides it. Cached for a few seconds
+  // (lib/waMode.js), so a chatty thread does not query the DB per message.
+  const botMode = await waMode.isBotMode(sessionId);
+
   if (data.fromMe) {
     // Our own echo. `from` is this session's own JID there, which is how we learn
     // our `@lid` — WhatsApp reports a mention of us in that form on LID-addressed
@@ -147,14 +161,14 @@ async function handleOpenwaEvent(payload) {
     openwa.learnOwnLid(sessionId, data.author);
     // Muse mode: our own message going out to a chat means that chat was handled,
     // so it leaves the pending list — the only acknowledgement protocol needed.
-    if (!config.openwa.autoReply) waPending.markHandled(sessionId, data);
+    if (!botMode) waPending.markHandled(sessionId, data);
     return;
   }
 
   // Muse mode: count the message, then stop. Nothing below this point runs, so
   // the backend sends no reply and spends no tokens — Muse reads the real
   // messages from the OpenWA API and answers them herself (lib/waPending.js).
-  if (!config.openwa.autoReply) {
+  if (!botMode) {
     const counted = waPending.markIncoming(sessionId, data);
     diag.record({
       kind: 'inbound',
@@ -371,6 +385,9 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const base = backendUrl.replace(/\/+$/, '');
+  // Who answers WhatsApp right now (V13): the org's toggle, unless the server is
+  // forcing bot mode. Cheap — lib/waMode.js caches the row.
+  const mode = await waMode.statusFor(conn?.openwa_session_id || '');
   res.json({
     openwa: {
       baseUrlConfigured: !!config.openwa.baseUrl,
@@ -383,11 +400,16 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
         ? conn.status                                   // respect the soft disconnect switch
         : (live?.status || conn?.status || 'disconnected'),
       webhookUrl: `${base}/api/webhooks/openwa`,
-      // V13: who answers inbound WhatsApp. `true` = this backend replies itself;
-      // `false` (default) = Muse mode, where the backend only counts messages and
-      // serves the pending feed below (see lib/waPending.js).
-      autoReply: config.openwa.autoReply,
-      mode: config.openwa.autoReply ? 'bot' : 'muse',
+      // V13: `autoReply` drives the "Answer WhatsApp from Chitra" toggle.
+      //  true  = this backend replies itself (original behaviour)
+      //  false = Muse mode: count only, and the pending feed below is what wakes
+      //          her up (see lib/waPending.js)
+      autoReply: mode.autoReply,
+      mode: mode.mode,
+      autoReplySource: mode.autoReplySource,             // 'env' | 'org' | 'default'
+      autoReplyForcedByEnv: mode.autoReplyForcedByEnv,   // true → the toggle is ignored
+      // false while migration_v13 has not been run: the toggle cannot be saved yet.
+      migrationV13Applied: !!conn && Object.prototype.hasOwnProperty.call(conn, 'auto_reply_enabled'),
       pendingUrl: `${base}/wa-pending`,
     },
   });
@@ -466,18 +488,21 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
   res.json({ ok: true, connection: result.data, webhookUrl });
 });
 
-// POST /api/org/openwa/settings — group-reply behaviour (V12)
+// POST /api/org/openwa/settings — per-org WhatsApp behaviour:
+//   groupRepliesEnabled (V12) — reply in groups after an @-mention
+//   autoReply (V13)           — answer WhatsApp from Chitra instead of Muse
 orgRouter.post('/settings', requireAuth, async (req, res) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const patch = {};
   if (typeof body.groupRepliesEnabled === 'boolean') patch.group_replies_enabled = body.groupRepliesEnabled;
+  if (typeof body.autoReply === 'boolean') patch.auto_reply_enabled = body.autoReply;
   if (!Object.keys(patch).length) {
-    return res.status(400).json({ error: 'groupRepliesEnabled (boolean) is required' });
+    return res.status(400).json({ error: 'groupRepliesEnabled or autoReply (boolean) is required' });
   }
 
   const { data: conn, error: readErr } = await supabaseAdmin
     .from('whatsapp_connections')
-    .select('id')
+    .select('id, openwa_session_id')
     .eq('organization_id', req.orgId)
     .maybeSingle();
   if (readErr) return res.status(500).json({ error: readErr.message });
@@ -489,7 +514,13 @@ orgRouter.post('/settings', requireAuth, async (req, res) => {
     .update(patch)
     .eq('id', conn.id);
   if (error) {
-    // The column ships with migration_v12 — name it instead of a raw Postgres error.
+    // Both columns ship with their own migration — name it instead of a raw
+    // Postgres error, so the owner knows exactly what to run.
+    if (/auto_reply_enabled/.test(error.message)) {
+      return res.status(500).json({
+        error: 'Database is missing migration_v13_openwa_auto_reply.sql — run it in the Supabase SQL editor.',
+      });
+    }
     if (/group_replies_enabled/.test(error.message)) {
       return res.status(500).json({
         error: 'Database is missing migration_v12_openwa_groups.sql — run it in the Supabase SQL editor.',
@@ -497,7 +528,24 @@ orgRouter.post('/settings', requireAuth, async (req, res) => {
     }
     return res.status(500).json({ error: error.message });
   }
-  res.json({ ok: true, groupRepliesEnabled: patch.group_replies_enabled !== false });
+
+  // A toggle must bite immediately, not when the mode cache expires.
+  waMode.invalidate(conn.openwa_session_id);
+  // Handing replies back to Chitra makes the pending list meaningless: Muse is
+  // not answering this session any more (the counter would otherwise sit there
+  // and keep her hook awake).
+  if (patch.auto_reply_enabled === true) waPending.clearPending();
+
+  const status = await waMode.statusFor(conn.openwa_session_id);
+  // Only what was asked for is echoed back, so a client toggling one switch never
+  // sees the other flip. The Channels page reloads GET .../status anyway.
+  res.json({
+    ok: true,
+    ...('group_replies_enabled' in patch
+      ? { groupRepliesEnabled: patch.group_replies_enabled !== false }
+      : {}),
+    ...status,
+  });
 });
 
 // GET /api/org/openwa/diagnostics — why a message did or did not get a reply.
