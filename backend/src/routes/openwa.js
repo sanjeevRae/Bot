@@ -44,6 +44,11 @@ const processedKeys = new Map();
 const DEDUPE_TTL_MS = 10 * 60 * 1000;
 const DEDUPE_MAX = 20000;
 
+// How long the pre-ack durable write may take before the webhook answers anyway
+// (the write then finishes in the background). A webhook that hangs is worse than
+// a slow one: OpenWA would retry and pile deliveries up.
+const ACK_TIMEOUT_MS = Math.max(0, parseInt(process.env.WA_ACK_TIMEOUT_MS || '4000', 10) || 0);
+
 function isDuplicate(key) {
   const t = processedKeys.get(key);
   if (t && Date.now() - t < DEDUPE_TTL_MS) return true;
@@ -105,7 +110,7 @@ async function getConnectionBySession(sessionId) {
 // ============================================================
 // POST /api/webhooks/openwa  (mounted with express.raw in server.js)
 // ============================================================
-webhookRouter.post('/openwa', (req, res) => {
+webhookRouter.post('/openwa', async (req, res) => {
   const raw = Buffer.isBuffer(req.body)
     ? req.body
     : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
@@ -119,23 +124,69 @@ webhookRouter.post('/openwa', (req, res) => {
   try { payload = JSON.parse(raw.toString('utf8')); }
   catch { return res.status(400).json({ error: 'Invalid JSON body' }); }
 
-  // Accept immediately so OpenWA does not retry; process in the background.
+  // DURABLE BEFORE THE ACKNOWLEDGE (V14). My Muse-mode count used to be taken
+  // after this 200, so a restart in between (every deploy) silently lost the
+  // message: OpenWA was told "received" and never retried, while the new process
+  // started with an empty count. Recording first means an acknowledged delivery
+  // is on disk, and the unique event_key makes OpenWA's own retries idempotent
+  // even across restarts. Bounded so a slow database cannot stall the webhook —
+  // on timeout the work continues in the background and handleOpenwaEvent below
+  // records it anyway (the same event_key, so still counted once).
+  let pending = null;
+  try {
+    pending = await withTimeout(recordPendingInbound(payload), ACK_TIMEOUT_MS);
+  } catch (err) {
+    console.error('[OpenWA] Could not record the pending message before ack:', err.message);
+  }
+
   res.status(200).json({ ok: true });
 
-  handleOpenwaEvent(payload).catch((err) => {
+  handleOpenwaEvent(payload, pending).catch((err) => {
     console.error('[OpenWA] Webhook processing error:', err.message);
   });
 });
 
-async function handleOpenwaEvent(payload) {
+/**
+ * Durable half of an inbound delivery: in Muse mode the message becomes a pending
+ * row before the webhook is acknowledged (see the route above).
+ *
+ * Note what it does NOT do: it does not care that the session is switched off
+ * ("suspended" in the log). The owner disconnecting the session is not a reason to
+ * drop a prospect's message — Muse decides what to do with it, and the feed is the
+ * only place she can learn about it.
+ *
+ * @returns {Promise<object|null>} what was recorded, or null when this delivery is
+ *   not Muse's business (history/lifecycle events, our own echoes, bot mode).
+ */
+async function recordPendingInbound(payload) {
+  if (!payload || payload.event !== 'message.received') return null;
+  const { sessionId, data, idempotencyKey } = payload;
+  if (!sessionId || !data || typeof data !== 'object' || data.fromMe) return null;
+
+  const { bot, softOff } = await waMode.modeFor(sessionId);
+  if (bot && !softOff) return null; // the backend answers this one itself
+
+  return waPending.markIncoming(sessionId, data, { idempotencyKey });
+}
+
+/** Bound a promise so the webhook ack can never hang on it. */
+function withTimeout(promise, ms) {
+  if (!ms) return promise;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms).unref()),
+  ]);
+}
+
+async function handleOpenwaEvent(payload, pending = null) {
   const { event, sessionId, idempotencyKey } = (payload && typeof payload === 'object') ? payload : {};
   if (!event || !sessionId) return;
   if (event !== 'message.received') {
     // Ignore lifecycle / other event types safely (no processing, no error).
     // Muse mode does care about two of them: a session going up/down (readiness
     // for GET /wa-pending) and an outbound echo on any event name (that clears
-    // the chat's pending entry). Both are cheap in-memory notes, and in bot mode
-    // there is simply nothing pending to clear.
+    // the chat's pending entry). Both are cheap notes, and in bot mode there is
+    // simply nothing pending to clear.
     waPending.noteSessionEvent(event, sessionId, payload.data);
     return;
   }
@@ -164,29 +215,39 @@ async function handleOpenwaEvent(payload) {
     openwa.learnOwnLid(sessionId, data.author);
     // Muse mode: our own message going out to a chat means that chat was handled,
     // so it leaves the pending list — the only acknowledgement protocol needed.
-    if (!botReplies) waPending.markHandled(sessionId, data);
+    if (!botReplies) await waPending.markHandled(sessionId, data);
     return;
   }
 
-  // Muse mode: count the message, then stop. Nothing below this point runs, so
-  // the backend sends no reply and spends no tokens — Muse reads the real
-  // messages from the OpenWA API and answers them herself (lib/waPending.js).
+  // Muse mode: the message is already counted (before this request was
+  // acknowledged — see recordPendingInbound), so stop here. Nothing below this
+  // point runs: the backend sends no reply and spends no tokens, and Muse reads
+  // the real messages from the OpenWA API and answers them herself.
   if (!botReplies) {
-    const counted = waPending.markIncoming(sessionId, data);
+    const counted = pending || await waPending.markIncoming(sessionId, data, { idempotencyKey });
     diag.record({
       kind: 'inbound',
       action: 'pending',
+      // `session-disconnected` only means the *bot* is switched off — the message
+      // is still pending and still on the feed, because dropping it silently is
+      // how a prospect gets lost.
       reason: softOff ? 'session-disconnected' : 'muse-mode',
       sessionId,
       chatId: counted ? counted.chatId : (data.chatId || data.from || null),
       pending: counted ? counted.count : null,
+      stored: counted ? counted.stored : null,
+      duplicate: counted ? counted.duplicate : null,
       isGroup: data.isGroup === true || String(data.chatId || data.from || '').endsWith('@g.us'),
     });
-    console.log('[OpenWA] Message counted for Muse (auto-reply off)', {
+    console.log('[OpenWA] Message counted for Muse', {
       sessionId,
       chatId: counted ? counted.chatId : null,
       pending: counted ? counted.count : null,
-      suspended: softOff || undefined,
+      stored: counted ? counted.stored : null,
+      duplicate: counted && counted.duplicate ? true : undefined,
+      // True when the owner has the session switched off: not a reason to drop
+      // the message, just why the bot will not answer it.
+      botOff: softOff || undefined,
     });
     return;
   }
@@ -547,10 +608,11 @@ orgRouter.post('/settings', requireAuth, async (req, res) => {
 
   // A toggle must bite immediately, not when the mode cache expires.
   waMode.invalidate(conn.openwa_session_id);
-  // Handing replies back to Chitra makes the pending list meaningless: Muse is
-  // not answering this session any more (the counter would otherwise sit there
-  // and keep her hook awake).
-  if (patch.auto_reply_enabled === true) waPending.clearPending();
+  // Deliberately NOT clearing the pending list here. Handing replies back to
+  // Chitra means the bot answers *new* messages, so the older unanswered ones stay
+  // on the feed until it does (its next reply to that chat settles them) or they
+  // age out. Dropping them on a toggle is exactly the silent loss this feed exists
+  // to prevent.
 
   const status = await waMode.statusFor(conn.openwa_session_id);
   // Only what was asked for is echoed back, so a client toggling one switch never

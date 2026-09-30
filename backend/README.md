@@ -114,10 +114,14 @@ replies. Two layers, so the owner gets a switch and ops keeps a rollback:
 
 | Mode | Who replies | What the backend does |
 |---|---|---|
-| Muse *(default: toggle off)* | Muse | Never replies. Counts incoming messages per chat, serves `GET /wa-pending`, clears a chat when Muse's own outgoing message is seen. |
-| Chitra *(toggle on)* | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing is counted for Muse. |
+| Muse *(default: toggle off)* | Muse | Never replies. Stores one pending row per inbound message *before* acking, serves `GET /wa-pending`, settles a chat when Muse's own outgoing message is seen. |
+| Chitra *(toggle on)* | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing new is counted for Muse. |
 
-Switching to Chitra clears the pending list, because Muse is no longer answering that session.
+Older pending rows stay on the feed when you flip to Chitra (they predate someone who
+would answer them) and settle themselves the next time the bot replies in that chat —
+they are never silently dropped. `suspended` in the log only means the bot is switched
+off (`whatsapp_connections.status`), never that the message was ignored: a switched-off
+session still records everything for Muse.
 
 ### Disconnect / Reconnect (soft switch)
 **Disconnect** on the card does *not* log the WhatsApp session out: it writes
@@ -155,11 +159,24 @@ Muse's hook: GET /wa-pending  → { new_messages, pending_chats, session_ready, 
 - `mode` — `"muse"` when this feed is authoritative; `"bot"` when the backend was switched
   back to `on`, so Muse can stand down instead of racing it.
 
-Pending state is deliberately in memory, bounded (`WA_PENDING_MAX_CHATS`, oldest chats
-dropped first) and content-free — no message text is ever stored, which is why the endpoint
-can stay unauthenticated. A restart loses counts: they are only a wake-up signal, and OpenWA
-remains the source of truth for what was actually said. The hook's frequent polls also keep a
-sleeping Render instance awake.
+Pending state is a table, not process memory (`wa_pending_messages`,
+**run [`supabase/migration_v14_wa_pending.sql`](./supabase/migration_v14_wa_pending.sql) once**).
+Every inbound message becomes one row *before* the webhook is acknowledged, so an
+acknowledged delivery can never be lost by a restart — the incident
+("Message counted for Muse …, suspended: true" in the log, feed stuck at 0 afterwards)
+was exactly that: the count lived only in memory and died with the process, and the
+ack had already told OpenWA not to retry. `event_key` is unique, so OpenWA retries
+are idempotent across restarts too. Rows carry chat id, gateway message id and
+timestamps — no message text is ever stored, which is why the endpoint can stay
+unauthenticated.
+
+The old in-memory mirror only runs when the table is missing (you get a one-line
+"run migration_v14" warning) or the DB blinks mid-read: the feed would rather show
+a stale guess than 0, because 0 puts Muse back to sleep. Rows age out by themselves:
+pending rows expire after `WA_PENDING_EXPIRE_DAYS` (they stop waking Muse), and
+settled rows are deleted after `WA_HANDLED_KEEP_DAYS`. Entries are cleared only by
+an observed reply or by that expiry — never by a restart, a toggle, or a mode
+change. The hook's frequent polls also keep a sleeping Render instance awake.
 
 ### Rollback
 Set `WHATSAPP_AUTO_REPLY=on` and the backend goes straight back to self-replying. One flag,

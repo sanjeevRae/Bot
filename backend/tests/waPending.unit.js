@@ -47,6 +47,64 @@ global.fetch = async (url, opts) => {
 //     select always carries `organization_id` (kind 'org').
 // Counting them separately is what lets the test prove both halves: Muse mode
 // never starts the reply pipeline, and `autoReply: true` still does.
+// ---------- wa_pending_messages: a real (in-memory) table ----------
+// The durable store is the fix for the reported loss, so it is simulated
+// faithfully: upsert is idempotent on event_key, updates mark rows handled, and
+// the builder is awaitable exactly like a PostgREST query.
+const pendingDb = { rows: [], nextId: 1 };
+const rowMatches = (row, filters) => filters.every(([op, col, val]) => {
+  if (op === 'eq') return String(row[col]) === String(val);
+  if (op === 'lt') return Date.parse(row[col]) < Date.parse(val);
+  if (op === 'in') return val.map(String).includes(String(row[col]));
+  return true;
+});
+
+function runPending(op) {
+  const rows = fakeSupabase.pendingRows;
+  if (op.kind === 'upsert') {
+    const key = op.conflict;
+    const seen = rows.some((r) => String(r[key]) === String(op.payload[key]));
+    if (seen) return { data: [], error: null };   // ignoreDuplicates
+    const row = {
+      id: pendingDb.nextId++,
+      status: 'pending',
+      is_group: false,
+      handled_at: null,
+      received_at: new Date().toISOString(),
+      ...op.payload,
+    };
+    rows.push(row);
+    return { data: [{ id: row.id }], error: null };
+  }
+  const hits = rows.filter((r) => rowMatches(r, op.filters));
+  if (op.kind === 'update') {
+    hits.forEach((r) => Object.assign(r, op.payload));
+    return { data: hits.map((r) => ({ id: r.id, chat_id: r.chat_id })), error: null };
+  }
+  if (op.kind === 'delete') {
+    fakeSupabase.pendingRows = rows.filter((r) => !hits.includes(r));
+    return { data: null, error: null };
+  }
+  return { data: hits.slice(0, op.limit), error: null };
+}
+
+function pendingTable() {
+  const op = { kind: 'select', filters: [], payload: null, conflict: null, limit: 5000 };
+  const b = {
+    select: () => b,
+    upsert: (row, opts) => { op.kind = 'upsert'; op.payload = row; op.conflict = (opts && opts.onConflict) || 'id'; return b; },
+    update: (patch) => { op.kind = 'update'; op.payload = patch; return b; },
+    delete: () => { op.kind = 'delete'; return b; },
+    eq: (c, v) => { op.filters.push(['eq', c, v]); return b; },
+    lt: (c, v) => { op.filters.push(['lt', c, v]); return b; },
+    in: (c, v) => { op.filters.push(['in', c, v]); return b; },
+    order: () => b,
+    limit: (n) => { op.limit = n; return b; },
+    then: (resolve) => resolve(runPending(op)), // await builder → the query result
+  };
+  return b;
+}
+
 const fakeSupabase = {
   orgLookups: 0,          // reply pipeline reached (would send a WhatsApp reply)
   modeReads: 0,           // the V13 switch was read
@@ -55,12 +113,20 @@ const fakeSupabase = {
   hasColumn: true,        // false → a deploy that predates migration_v13
   mapped: true,           // false → no whatsapp_connections row for the session
   patches: [],            // what /settings wrote
-  from() {
+  pendingRows: [],        // the wa_pending_messages table (durable store)
+  from(table) {
+    // The durable pending store gets a real (in-memory) table so the test can
+    // prove a count survives a reset — the exact case that lost the 12:46 message.
+    if (table === 'wa_pending_messages') return pendingTable();
     const b = { _kind: 'other' };
     ['eq', 'neq', 'insert', 'order', 'limit'].forEach((m) => { b[m] = () => b; });
     b.select = (cols) => {
       const c = String(cols == null ? '' : cols);
-      if (c.includes('organization_id')) { fakeSupabase.orgLookups += 1; b._kind = 'org'; }
+      // `organization_id` alone is lib/waPending.js tagging a pending row with its
+      // org (not a reply); the reply pipeline's org resolution selects the whole
+      // connection row, so it is the one that carries other columns too.
+      if (c === 'organization_id') b._kind = 'orgtag';
+      else if (c.includes('organization_id')) { fakeSupabase.orgLookups += 1; b._kind = 'org'; }
       else if (c.includes('auto_reply_enabled')) { fakeSupabase.modeReads += 1; b._kind = 'mode'; }
       else if (c === '*') b._kind = 'conn';
       else if (c.includes('openwa_session_id')) b._kind = 'session';
@@ -82,6 +148,10 @@ const fakeSupabase = {
       return b; // `await` on a non-thenable yields this object, so `b.error` is the result
     };
     b.single = b.maybeSingle = async () => {
+      if (b._kind === 'orgtag') {
+        // Tagging a pending row: the org the session belongs to.
+        return fakeSupabase.mapped ? { data: { organization_id: 'ORG-1' }, error: null } : { data: null, error: null };
+      }
       if (b._kind === 'mode') {
         if (!fakeSupabase.hasColumn) {
           return { data: null, error: { message: 'column "auto_reply_enabled" does not exist' } };
@@ -263,9 +333,11 @@ const server = app.listen(0, async () => {
     check('two messages in one chat = 2 pending, 1 chat (the { chat: 2 } contract)',
       p.new_messages === 2 && p.pending_chats.length === 1, JSON.stringify(p));
 
-    // A retry of the same delivery must not double-count.
-    await deliver(incoming(CHAT_B, { idempotencyKey: 'retry-me' }));
-    await deliver(incoming(CHAT_B, { idempotencyKey: 'retry-me' }));
+    // A retry of the same delivery (OpenWA reuses the payload) must not
+    // double-count — the durable store dedupes on the event key.
+    const retried = incoming(CHAT_B, { idempotencyKey: 'retry-me' });
+    await deliver(retried);
+    await deliver(retried);
     await until(async () => (await pending()).new_messages === 3);
     p = await pending();
     check('a retried delivery (same idempotency key) is counted once',
@@ -342,6 +414,7 @@ const server = app.listen(0, async () => {
     // ==================== 8. the dashboard toggle (V13) ====================
     // POST /api/org/openwa/settings { autoReply } is what the Channels page's
     // switch calls. On = this backend answers (original path), off = Muse mode.
+    await waPending.clearPending();   // deterministic starting point
     await deliver(incoming(CHAT_A));
     await until(async () => (await pending()).new_messages === 1);
 
@@ -359,8 +432,8 @@ const server = app.listen(0, async () => {
       JSON.stringify(fakeSupabase.patches));
 
     p = await pending();
-    check('toggle to Chitra: the pending list is cleared (Muse is out of this session)',
-      p.new_messages === 0 && p.pending_chats.length === 0, JSON.stringify(p));
+    check('toggle to Chitra: pending messages are NOT dropped (only an observed reply clears them)',
+      p.new_messages === 1 && p.pending_chats[0] === CHAT_A, JSON.stringify(p));
     check('toggle to Chitra: the feed says mode "bot" so Muse stands down', p.mode === 'bot', p.mode);
 
     const beforeBot = fakeSupabase.orgLookups;
@@ -369,8 +442,8 @@ const server = app.listen(0, async () => {
     check('toggle to Chitra: incoming messages reach the reply pipeline again',
       fakeSupabase.orgLookups > beforeBot, `orgLookups=${fakeSupabase.orgLookups}`);
     await sleep(50);
-    check('toggle to Chitra: nothing is counted for Muse while the bot answers',
-      (await pending()).new_messages === 0);
+    check('toggle to Chitra: the new message is not counted for Muse (the bot answers it)',
+      (await pending()).new_messages === 1);
 
     // ...and switching back must not need a deploy.
     res = await fetch(`${base}/api/org/openwa/settings`, {
@@ -385,10 +458,10 @@ const server = app.listen(0, async () => {
     check('toggle back to Muse: the feed follows immediately', (await pending()).mode === 'muse');
 
     await deliver(incoming(CHAT_A));
-    await until(async () => (await pending()).new_messages === 1);
-    check('toggle back to Muse: counting resumes and the reply pipeline is untouched',
-      fakeSupabase.orgLookups === beforeBot + 1 || fakeSupabase.orgLookups >= beforeBot,
-      `orgLookups=${fakeSupabase.orgLookups}`);
+    await until(async () => (await pending()).new_messages === 2);
+    p = await pending();
+    check('toggle back to Muse: counting resumes (the untouched row stays, the new one is added)',
+      p.new_messages === 2 && p.mode === 'muse', JSON.stringify(p));
 
     res = await fetch(`${base}/api/org/openwa/settings`, {
       method: 'POST',
@@ -438,7 +511,7 @@ const server = app.listen(0, async () => {
     fakeSupabase.autoReplyEnabled = true;  // Chitra mode — the bug would send a reply
     fakeSupabase.rowStatus = 'connected';
     waMode.invalidate(SESSION);
-    waPending.clearPending();
+    await waPending.clearPending();
 
     let st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
     check('/status: a connected session is linked + connected + answering',
@@ -488,6 +561,72 @@ const server = app.listen(0, async () => {
     fakeSupabase.autoReplyEnabled = false;
     fakeSupabase.rowStatus = 'connected';
     waMode.invalidate(SESSION);
+
+    // ============ 11. a counted message can never be lost (the 12:46 report) ============
+    // Reported: a genuine inbound ("test", new waMessageId) was counted —
+    //   [OpenWA] Message counted for Muse { …, pending: 1, suspended: true }
+    // — yet GET /wa-pending stayed at 0 on every poll afterwards. "suspended" is
+    // NOT dedup and NOT "ignored": it only means the owner had switched the bot
+    // off (whatsapp_connections.status = 'disconnected'). The message was counted
+    // in memory, the service restarted around then (a deploy), and the count died
+    // with the process — the webhook had already been acknowledged, so OpenWA
+    // never redelivered it. Both halves are pinned down here.
+    fakeSupabase.autoReplyEnabled = false;
+    fakeSupabase.rowStatus = 'disconnected';       // the owner had hit Disconnect
+    waMode.invalidate(SESSION);
+    await waPending.clearPending();
+
+    const msgId = 'false_202229004943510@lid_ACA8EFD57D7C210614E34A7D9DD2618A';
+    const incident = incoming('202229004943510@lid', { body: 'test', data: { id: msgId } });
+    const orgLookupsBefore = fakeSupabase.orgLookups;
+    await deliver(incident);
+    await until(async () => (await pending()).new_messages === 1);
+    let incidentFeed = await pending();
+    check('a message arriving while the session is switched off is still counted (botOff ≠ ignored)',
+      incidentFeed.new_messages === 1 && incidentFeed.pending_chats[0] === '202229004943510@lid',
+      JSON.stringify(incidentFeed));
+    check('it is stored durably, and the bot still answers nothing',
+      fakeSupabase.pendingRows.filter((r) => r.status === 'pending').length === 1
+      && fakeSupabase.orgLookups === orgLookupsBefore,
+      `rows=${fakeSupabase.pendingRows.length} orgLookups=${fakeSupabase.orgLookups}`);
+
+    // THE RESTART: process memory gone, database intact — exactly a Render deploy.
+    waPending.reset();
+    waMode.reset();
+    const afterRestart = await pending();
+    check('the pending message SURVIVES a service restart (the reported bug)',
+      afterRestart.new_messages === 1 && afterRestart.pending_chats[0] === '202229004943510@lid',
+      JSON.stringify(afterRestart));
+
+    // OpenWA retrying the same payload after the restart must not double-count:
+    // the old in-memory dedupe could never have caught that.
+    await deliver(incident);
+    await sleep(100);
+    check('a redelivered payload is not counted twice (idempotent across restarts)',
+      (await pending()).new_messages === 1, JSON.stringify(await pending()));
+
+    // ...and Muse's reply still clears it, after the restart.
+    await deliver(outgoing('202229004943510@lid', { from: '9779712039906@lid' }));
+    await until(async () => (await pending()).new_messages === 0);
+    incidentFeed = await pending();
+    check("Muse's reply clears the chat even after a restart (rows are settled, not forgotten)",
+      incidentFeed.new_messages === 0
+      && fakeSupabase.pendingRows.every((r) => r.status !== 'pending'),
+      JSON.stringify(incidentFeed));
+
+    // Two messages two minutes apart are two messages: nothing here dedupes by
+    // chat, body or recency.
+    await deliver(incoming('202229004943510@lid', { body: 'first' }));
+    await deliver(incoming('202229004943510@lid', { body: 'second' }));
+    await until(async () => (await pending()).new_messages === 2);
+    incidentFeed = await pending();
+    check('two messages from the same chat in quick succession both surface',
+      incidentFeed.new_messages === 2 && incidentFeed.pending_chats.length === 1,
+      JSON.stringify(incidentFeed));
+
+    fakeSupabase.rowStatus = 'connected';
+    waMode.invalidate(SESSION);
+    await waPending.clearPending();
   } catch (e) {
     check('test ran without throwing', false, e.message + ' @ ' + (e.stack || '').split('\n')[1]);
   } finally {
