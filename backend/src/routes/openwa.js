@@ -149,9 +149,12 @@ async function handleOpenwaEvent(payload) {
   if (!data || typeof data !== 'object') return;
 
   // Who answers this WhatsApp right now (V13): the org's Channels toggle unless
-  // the server's WHATSAPP_AUTO_REPLY=on overrides it. Cached for a few seconds
-  // (lib/waMode.js), so a chatty thread does not query the DB per message.
-  const botMode = await waMode.isBotMode(sessionId);
+  // the server's WHATSAPP_AUTO_REPLY=on overrides it — and never while the owner
+  // has switched the session off with Disconnect (a soft switch: the mapping
+  // stays, but nothing may be answered). Cached for a few seconds (lib/waMode.js),
+  // so a chatty thread does not query the DB per message.
+  const { bot, softOff } = await waMode.modeFor(sessionId);
+  const botReplies = bot && !softOff;
 
   if (data.fromMe) {
     // Our own echo. `from` is this session's own JID there, which is how we learn
@@ -161,19 +164,19 @@ async function handleOpenwaEvent(payload) {
     openwa.learnOwnLid(sessionId, data.author);
     // Muse mode: our own message going out to a chat means that chat was handled,
     // so it leaves the pending list — the only acknowledgement protocol needed.
-    if (!botMode) waPending.markHandled(sessionId, data);
+    if (!botReplies) waPending.markHandled(sessionId, data);
     return;
   }
 
   // Muse mode: count the message, then stop. Nothing below this point runs, so
   // the backend sends no reply and spends no tokens — Muse reads the real
   // messages from the OpenWA API and answers them herself (lib/waPending.js).
-  if (!botMode) {
+  if (!botReplies) {
     const counted = waPending.markIncoming(sessionId, data);
     diag.record({
       kind: 'inbound',
       action: 'pending',
-      reason: 'muse-mode',
+      reason: softOff ? 'session-disconnected' : 'muse-mode',
       sessionId,
       chatId: counted ? counted.chatId : (data.chatId || data.from || null),
       pending: counted ? counted.count : null,
@@ -183,6 +186,7 @@ async function handleOpenwaEvent(payload) {
       sessionId,
       chatId: counted ? counted.chatId : null,
       pending: counted ? counted.count : null,
+      suspended: softOff || undefined,
     });
     return;
   }
@@ -388,15 +392,24 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
   // Who answers WhatsApp right now (V13): the org's toggle, unless the server is
   // forcing bot mode. Cheap — lib/waMode.js caches the row.
   const mode = await waMode.statusFor(conn?.openwa_session_id || '');
+  // "Disconnect" is a soft switch: the row keeps `openwa_session_id` (and the
+  // audit trail), so `linked` says a session is saved and `connected` says the
+  // owner has not switched it off. The card must follow the owner's switch, not
+  // the mere presence of a mapping — otherwise Disconnect looks like it did
+  // nothing. Suspended replies are reported too (toggle saved on + disconnected).
+  const softOff = conn?.status === 'disconnected' || conn?.status === 'error';
+  const linked = !!conn?.openwa_session_id;
   res.json({
     openwa: {
       baseUrlConfigured: !!config.openwa.baseUrl,
-      connected: !!conn?.openwa_session_id,
+      linked,
+      connected: linked && !softOff,
+      disconnectedByOwner: linked && softOff,
       sessionId: conn?.openwa_session_id || '',
       phoneNumber: conn?.phone_number || '',
       // V12: group chats are only answered after an @-mention (see lib/openwaInbound.js).
       groupRepliesEnabled: conn ? conn.group_replies_enabled !== false : false,
-      status: (conn?.status === 'disconnected' || conn?.status === 'error')
+      status: softOff
         ? conn.status                                   // respect the soft disconnect switch
         : (live?.status || conn?.status || 'disconnected'),
       webhookUrl: `${base}/api/webhooks/openwa`,
@@ -408,6 +421,7 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
       mode: mode.mode,
       autoReplySource: mode.autoReplySource,             // 'env' | 'org' | 'default'
       autoReplyForcedByEnv: mode.autoReplyForcedByEnv,   // true → the toggle is ignored
+      autoReplySuspended: mode.autoReplySuspended,       // saved on, but the session is disconnected
       // false while migration_v13 has not been run: the toggle cannot be saved yet.
       migrationV13Applied: !!conn && Object.prototype.hasOwnProperty.call(conn, 'auto_reply_enabled'),
       pendingUrl: `${base}/wa-pending`,
@@ -485,6 +499,8 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
   }
 
   if (result.error) return res.status(500).json({ error: result.error.message });
+  // New mapping and a fresh 'connected' status: drop any cached mode for it.
+  waMode.invalidate(sessionId);
   res.json({ ok: true, connection: result.data, webhookUrl });
 });
 
@@ -612,14 +628,26 @@ orgRouter.get('/diagnostics', requireAuth, async (req, res) => {
   res.json({ ok: true, diagnostics: out });
 });
 
-// POST /api/org/openwa/disconnect — mark the org's connection disconnected (keep audit row)
+// POST /api/org/openwa/disconnect — soft-off this session: keep the mapping and
+// the audit row, but stop replying (and stop the pending feed driving Muse's hook
+// through the mode) until Reconnect. Reversible from the same card.
 orgRouter.post('/disconnect', requireAuth, async (req, res) => {
+  const { data: conn, error: readErr } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .select('id, openwa_session_id')
+    .eq('organization_id', req.orgId)
+    .maybeSingle();
+  if (readErr) return res.status(500).json({ error: readErr.message });
+
   const { error } = await supabaseAdmin
     .from('whatsapp_connections')
     .update({ status: 'disconnected', updated_at: new Date().toISOString() })
     .eq('organization_id', req.orgId);
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true });
+
+  // The switch must bite on the next message, not when the mode cache expires.
+  waMode.invalidate(conn?.openwa_session_id);
+  res.json({ ok: true, ...(await waMode.statusFor(conn?.openwa_session_id || '')) });
 });
 
 // POST /api/org/openwa/reconnect — ask OpenWA to start (reconnect) the org's session
@@ -642,7 +670,8 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
     .from('whatsapp_connections')
     .update({ status: 'connected', updated_at: new Date().toISOString() })
     .eq('organization_id', req.orgId);
-  res.json({ ok: true, result });
+  waMode.invalidate(conn.openwa_session_id);
+  res.json({ ok: true, result, ...(await waMode.statusFor(conn.openwa_session_id)) });
 });
 
 // POST /api/org/openwa/test — send a test WhatsApp message via OpenWA

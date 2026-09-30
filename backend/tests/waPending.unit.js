@@ -17,13 +17,28 @@
  */
 process.env.WHATSAPP_AUTO_REPLY = 'off';              // the flag under test (default)
 process.env.OPENWA_WEBHOOK_SECRET = 'test-secret-0123456789';
-process.env.OPENWA_BASE_URL = '';                      // no gateway → no probe calls
-process.env.OPENWA_API_KEY = '';
+process.env.OPENWA_BASE_URL = 'http://openwa.test';    // mocked gateway (see the fetch stub)
+process.env.OPENWA_API_KEY = 'test-key';
 process.env.WA_SESSION_WAIT_MS = '0';                  // status poll never waits
 
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+
+// ---------- Gateway stub ----------
+// The OpenWA client talks to OPENWA_BASE_URL through global fetch. Intercepting
+// only that host leaves the test's own calls to the local express server alone,
+// and lets Disconnect/Reconnect be exercised for real (start → CONNECTED).
+const realFetch = global.fetch;
+const gateway = { calls: [], session: { status: 'CONNECTED', phone: '9779712039906', pushName: 'Chitra AI' } };
+global.fetch = async (url, opts) => {
+  const u = String(url);
+  if (u.startsWith('http://openwa.test')) {
+    gateway.calls.push(`${(opts && opts.method) || 'GET'} ${u}`);
+    return { ok: true, status: 200, text: async () => JSON.stringify(gateway.session) };
+  }
+  return realFetch(url, opts);
+};
 
 // ---------- Supabase stub: mode lookup vs. the reply pipeline ----------
 // Two different reads happen against `whatsapp_connections`:
@@ -36,6 +51,7 @@ const fakeSupabase = {
   orgLookups: 0,          // reply pipeline reached (would send a WhatsApp reply)
   modeReads: 0,           // the V13 switch was read
   autoReplyEnabled: false, // what the Channels toggle "stores"
+  rowStatus: 'connected',  // whatsapp_connections.status (the Disconnect soft switch)
   hasColumn: true,        // false → a deploy that predates migration_v13
   mapped: true,           // false → no whatsapp_connections row for the session
   patches: [],            // what /settings wrote
@@ -46,6 +62,7 @@ const fakeSupabase = {
       const c = String(cols == null ? '' : cols);
       if (c.includes('organization_id')) { fakeSupabase.orgLookups += 1; b._kind = 'org'; }
       else if (c.includes('auto_reply_enabled')) { fakeSupabase.modeReads += 1; b._kind = 'mode'; }
+      else if (c === '*') b._kind = 'conn';
       else if (c.includes('openwa_session_id')) b._kind = 'session';
       return b;
     };
@@ -60,6 +77,8 @@ const fakeSupabase = {
           fakeSupabase.autoReplyEnabled = patch.auto_reply_enabled === true;
         }
       }
+      // Disconnect / Reconnect write `status` — the soft switch under test.
+      if ('status' in patch) fakeSupabase.rowStatus = patch.status;
       return b; // `await` on a non-thenable yields this object, so `b.error` is the result
     };
     b.single = b.maybeSingle = async () => {
@@ -68,7 +87,23 @@ const fakeSupabase = {
           return { data: null, error: { message: 'column "auto_reply_enabled" does not exist' } };
         }
         if (!fakeSupabase.mapped) return { data: null, error: null };
-        return { data: { auto_reply_enabled: fakeSupabase.autoReplyEnabled }, error: null };
+        return { data: { auto_reply_enabled: fakeSupabase.autoReplyEnabled, status: fakeSupabase.rowStatus }, error: null };
+      }
+      if (b._kind === 'conn') {
+        // `select('*')` on the org's connection row — what GET /status reads.
+        return fakeSupabase.mapped
+          ? {
+            data: {
+              id: 'CONN-1',
+              openwa_session_id: 'chitra-ai',
+              phone_number: '9779712039906',
+              status: fakeSupabase.rowStatus,
+              group_replies_enabled: true,
+              auto_reply_enabled: fakeSupabase.autoReplyEnabled,
+            },
+            error: null,
+          }
+          : { data: null, error: null };
       }
       if (b._kind === 'session') {
         // The connection row: `id` for the settings update, the session id for the
@@ -394,6 +429,64 @@ const server = app.listen(0, async () => {
     check('with the env override on, the feed reports mode "bot" (and the toggle is ignored)',
       (await pending()).mode === 'bot');
     config.openwa.autoReply = false;
+    waMode.invalidate(SESSION);
+
+    // ==================== 10. Disconnect must actually stay disconnected ====================
+    // Reported bug: clicking Disconnect left the card saying "Connected", because
+    // `connected` only meant "a session id is saved". Now the owner's soft switch
+    // decides the badge AND stops the backend from answering.
+    fakeSupabase.autoReplyEnabled = true;  // Chitra mode — the bug would send a reply
+    fakeSupabase.rowStatus = 'connected';
+    waMode.invalidate(SESSION);
+    waPending.clearPending();
+
+    let st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
+    check('/status: a connected session is linked + connected + answering',
+      st.linked === true && st.connected === true && st.disconnectedByOwner === false
+      && st.autoReply === true && st.mode === 'bot' && st.autoReplySuspended === false,
+      JSON.stringify(st));
+
+    let d = await (await fetch(`${base}/api/org/openwa/disconnect`, { method: 'POST' })).json();
+    check('POST /disconnect switches the session off and reports it',
+      d.ok === true && d.autoReply === true && d.autoReplySuspended === true && d.mode === 'muse',
+      JSON.stringify(d));
+
+    st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
+    check('/status no longer claims Connected after Disconnect (the reported bug)',
+      st.linked === true && st.connected === false && st.disconnectedByOwner === true
+      && st.status === 'disconnected', JSON.stringify(st));
+
+    // The soft switch has to mean something on the wire, not just in the badge.
+    const beforeOff = fakeSupabase.orgLookups;
+    await deliver(incoming(CHAT_A));
+    await until(async () => (await pending()).new_messages === 1);
+    check('a disconnected session answers nothing (reply pipeline untouched, message counted)',
+      fakeSupabase.orgLookups === beforeOff && (await pending()).new_messages === 1,
+      `orgLookups=${fakeSupabase.orgLookups}`);
+    check('the pending feed reports muse mode while the backend is switched off',
+      (await pending()).mode === 'muse');
+
+    d = await (await fetch(`${base}/api/org/openwa/reconnect`, { method: 'POST' })).json();
+    check('POST /reconnect brings the session back with the switch still saved on',
+      d.ok === true && d.mode === 'bot' && d.autoReply === true && d.autoReplySuspended === false,
+      JSON.stringify(d));
+    check('reconnect really asked the gateway to start the session',
+      gateway.calls.some((c) => c.includes('/start')), gateway.calls.join(' | '));
+
+    st = (await (await fetch(`${base}/api/org/openwa/status`)).json()).openwa;
+    check('/status: connected again after Reconnect',
+      st.connected === true && st.disconnectedByOwner === false && st.mode === 'bot',
+      JSON.stringify(st));
+
+    const beforeOn = fakeSupabase.orgLookups;
+    await deliver(incoming(CHAT_A));
+    await until(() => fakeSupabase.orgLookups > beforeOn, 2000);
+    check('after Reconnect the reply pipeline is reachable again',
+      fakeSupabase.orgLookups > beforeOn, `orgLookups=${fakeSupabase.orgLookups}`);
+
+    // Leave the stub in its default state (Muse mode, connected).
+    fakeSupabase.autoReplyEnabled = false;
+    fakeSupabase.rowStatus = 'connected';
     waMode.invalidate(SESSION);
   } catch (e) {
     check('test ran without throwing', false, e.message + ' @ ' + (e.stack || '').split('\n')[1]);

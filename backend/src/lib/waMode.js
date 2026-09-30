@@ -19,6 +19,11 @@
  * the migration has not been run) the answer is Muse mode. Staying quiet is
  * recoverable — racing a reply with Muse's is what this whole switch exists to
  * stop.
+ *
+ * The same read also returns the row's `status`, because "Disconnect" on the
+ * Channels page is a soft switch: it keeps the session mapped (and the audit row)
+ * but must actually stop this backend from answering. A session whose owner
+ * disconnected it is therefore *not* bot mode, whatever the toggle says.
  */
 
 const config = require('../config');
@@ -27,7 +32,10 @@ const config = require('../config');
 const MODE_TTL_MS = Math.max(0, parseInt(process.env.WA_MODE_TTL_MS || '30000', 10) || 0);
 const CACHE_MAX = 500;
 
-/** sessionId → { bot, source, at } */
+/** Stored statuses that mean "the owner switched this session off". */
+const OFF_STATUSES = ['disconnected', 'error'];
+
+/** sessionId → { bot, source, softOff, status, at } */
 const cache = new Map();
 let warnedMissingColumn = false;
 
@@ -46,24 +54,32 @@ async function readOrgSwitch(sessionId) {
   const supabaseAdmin = require('./supabase');
   const { data, error } = await supabaseAdmin
     .from('whatsapp_connections')
-    .select('auto_reply_enabled')
+    .select('auto_reply_enabled, status')
     .eq('openwa_session_id', sessionId)
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message || 'whatsapp_connections read failed');
-  if (!data) return { bot: false, source: 'default' };
-  return { bot: data.auto_reply_enabled === true, source: 'org' };
+  if (!data) return { bot: false, source: 'default', softOff: false, status: null };
+  const status = data.status || null;
+  return {
+    bot: data.auto_reply_enabled === true,
+    source: 'org',
+    softOff: OFF_STATUSES.includes(String(status)),
+    status,
+  };
 }
 
 /**
- * @returns {Promise<{bot: boolean, source: 'env'|'org'|'default'}>} who replies
+ * @returns {Promise<{bot: boolean, source: 'env'|'org'|'default', softOff: boolean, status: string|null}>}
+ *   `bot` is what the org's toggle says, `softOff` whether the owner disconnected
+ *   the session. What actually happens is `bot && !softOff`.
  */
 async function modeFor(sessionId) {
-  if (config.openwa.autoReply) return { bot: true, source: 'env' };
-  if (!sessionId) return { bot: false, source: 'default' };
+  if (config.openwa.autoReply) return { bot: true, source: 'env', softOff: false, status: null };
+  if (!sessionId) return { bot: false, source: 'default', softOff: false, status: null };
 
   const hit = cache.get(sessionId);
-  if (hit && Date.now() - hit.at < MODE_TTL_MS) return { bot: hit.bot, source: hit.source };
+  if (hit && Date.now() - hit.at < MODE_TTL_MS) return hit;
 
   let result;
   try {
@@ -77,7 +93,7 @@ async function modeFor(sessionId) {
     } else {
       console.warn('[waMode] could not read the auto-reply switch:', err.message);
     }
-    result = { bot: false, source: 'default' };
+    result = { bot: false, source: 'default', softOff: false, status: null };
   }
 
   if (MODE_TTL_MS > 0) {
@@ -87,13 +103,9 @@ async function modeFor(sessionId) {
       for (const [key, entry] of cache) if (now - entry.at >= MODE_TTL_MS) cache.delete(key);
       if (cache.size > CACHE_MAX) cache.clear(); // pathological churn: start over
     }
+    return cache.get(sessionId);
   }
   return result;
-}
-
-/** The one boolean the webhook needs. */
-async function isBotMode(sessionId) {
-  return (await modeFor(sessionId)).bot;
 }
 
 /**
@@ -101,12 +113,17 @@ async function isBotMode(sessionId) {
  * including whether the org's own switch is currently being overridden.
  */
 async function statusFor(sessionId) {
-  const { bot, source } = await modeFor(sessionId);
+  const { bot, source, softOff, status } = await modeFor(sessionId);
   return {
+    // What the Channels toggle shows (the stored intent, env override included).
     autoReply: bot,
-    mode: bot ? 'bot' : 'muse',
+    // What is actually happening: a disconnected session answers nothing.
+    mode: bot && !softOff ? 'bot' : 'muse',
     autoReplySource: source,
     autoReplyForcedByEnv: !!config.openwa.autoReply,
+    // Saved as on, but suspended because the owner disconnected the session.
+    autoReplySuspended: bot && softOff,
+    sessionStatus: status,
   };
 }
 
@@ -116,4 +133,4 @@ function reset() {
   warnedMissingColumn = false;
 }
 
-module.exports = { modeFor, isBotMode, statusFor, invalidate, reset, MODE_TTL_MS };
+module.exports = { modeFor, statusFor, invalidate, reset, MODE_TTL_MS };

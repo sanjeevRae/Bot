@@ -43,8 +43,8 @@ Run `supabase/schema.sql` in the Supabase SQL Editor once. It creates all tables
 | POST | `/api/org/api-key` | JWT | Generate widget API key |
 | GET | `/api/org/openwa/status` | JWT | Self-hosted OpenWA connection status |
 | POST | `/api/org/openwa/connect` | JWT | Verify + connect an OpenWA session |
-| POST | `/api/org/openwa/disconnect` | JWT | Disconnect the org's OpenWA session |
-| POST | `/api/org/openwa/reconnect` | JWT | Ask OpenWA to (re)start the org's session |
+| POST | `/api/org/openwa/disconnect` | JWT | Soft-off the org's session: stops replies until Reconnect (mapping + audit row kept) |
+| POST | `/api/org/openwa/reconnect` | JWT | Restart the OpenWA session and resume answering |
 | POST | `/api/org/openwa/settings` | JWT | Per-org WhatsApp behaviour: `{ groupRepliesEnabled }` (V12), `{ autoReply }` (V13) |
 | POST | `/api/org/openwa/test` | JWT | Send a test WhatsApp message via OpenWA |
 | POST | `/api/webhooks/openwa` | HMAC (signed) | Inbound OpenWA webhook (message.received) |
@@ -118,6 +118,15 @@ replies. Two layers, so the owner gets a switch and ops keeps a rollback:
 | Chitra *(toggle on)* | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing is counted for Muse. |
 
 Switching to Chitra clears the pending list, because Muse is no longer answering that session.
+
+### Disconnect / Reconnect (soft switch)
+**Disconnect** on the card does *not* log the WhatsApp session out: it writes
+`whatsapp_connections.status = 'disconnected'` and keeps the mapping, so the card shows
+**Disconnected**, offers **Reconnect**, and *stops the backend answering* — neither Chitra mode
+nor a saved-auto-reply toggle can send while it is off (the toggle then reads *saved on, but
+suspended*). **Reconnect** calls OpenWA's `POST /sessions/{id}/start`, writes `status = 'connected'`
+and answering resumes. Both invalidate the cached mode immediately, so the next message follows
+the switch, not a 30-second timer.
 
 ### Flow
 ```
