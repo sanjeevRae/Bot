@@ -261,6 +261,24 @@ export default function Channels() {
             <p className="text-[13px] text-ink-500">
               Webhook: <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{openwa.webhookUrl}</code>
             </p>
+            <p className="text-[13px] text-ink-500">
+              Replies:{' '}
+              <span className="font-medium">{openwa.autoReply ? 'Chitra bot (backend replies)' : 'Muse (backend counts only)'}</span>
+              {!openwa.autoReply && openwa.pendingUrl && (
+                <>
+                  {' '}· Pending feed:{' '}
+                  <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{openwa.pendingUrl}</code>
+                </>
+              )}
+            </p>
+            {!openwa.autoReply && (
+              <p className="text-xs text-ink-400">
+                Automatic replies are off for WhatsApp: the backend only counts incoming messages and
+                publishes them on the pending feed above, which Muse polls before answering through OpenWA.
+                Set <code className="font-mono">WHATSAPP_AUTO_REPLY=on</code> on the backend to hand replies
+                back to Chitra.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
               <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>

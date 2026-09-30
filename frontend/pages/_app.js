@@ -1,9 +1,13 @@
-import '../styles/globals.css';
+﻿import '../styles/globals.css';
 import { useState, useEffect } from 'react';
 import { supabase, fetchApi, getManagingOrg, setManagingOrg } from '../lib/supabaseClient';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import PostHog from '../components/PostHog';
+
+// Marketing and auth pages should render immediately during SSR and on first paint
+// without gating behind client-side Supabase auth checking.
+const PUBLIC_PATHS = ['/', '/login', '/signup', '/confirm', '/reset-password'];
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
@@ -185,7 +189,7 @@ export default function App({ Component, pageProps }) {
           </div>
         </div>
       )}
-      {loading ? (
+      {!PUBLIC_PATHS.includes(router.pathname) && loading ? (
         <div className="flex h-[80vh] items-center justify-center text-sm text-ink-400">Loading…</div>
       ) : (
         <Component {...pageProps} user={user} />

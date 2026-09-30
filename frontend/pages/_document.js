@@ -1,13 +1,15 @@
-import { Html, Head, Main, NextScript } from 'next/document';
+﻿import { Html, Head, Main, NextScript } from 'next/document';
 
 export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        <meta charSet="utf-8" />
         <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="icon" href="/logo.png" type="image/png" sizes="180x180" />
         <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <meta name="theme-color" content="#111827" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
