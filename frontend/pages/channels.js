@@ -258,12 +258,19 @@ export default function Channels() {
             <h2 className="text-sm font-semibold text-ink-900">WhatsApp (OpenWA)</h2>
           </div>
           <span className={openwa?.connected ? 'chip-success' : 'chip'}>
-            {openwa?.connected ? 'Connected' : 'Not connected'}
+            {openwa?.connected ? 'Connected' : openwa?.linked ? 'Disconnected' : 'Not connected'}
           </span>
         </div>
 
-        {openwa?.connected ? (
+        {openwa?.linked ? (
           <div className="space-y-3">
+            {!openwa.connected && (
+              <p className="rounded-lg border border-amber-100 bg-amber-50/70 px-3.5 py-3 text-[13px] text-amber-700">
+                {openwa.disconnectedByOwner
+                  ? 'Disconnected — Chitra is not using this WhatsApp, so no message is answered and the auto-reply switch below is suspended. Press Reconnect to start answering again (the OpenWA session itself keeps running).'
+                  : 'This OpenWA session is not connected at the gateway (no QR link). Press Reconnect, or scan the QR in your OpenWA dashboard.'}
+              </p>
+            )}
             <p className="text-[13px] text-ink-500">
               Session: <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{openwa.sessionId}</code>
               {openwa.phoneNumber && <> · Number: <span className="font-medium">{openwa.phoneNumber}</span></>}
@@ -303,6 +310,11 @@ export default function Channels() {
                     Forced on by the server setting WHATSAPP_AUTO_REPLY=on — this switch is ignored until that is removed.
                   </span>
                 )}
+                {openwa.autoReplySuspended && (
+                  <span className="mt-1 block text-xs text-amber-600">
+                    Saved on, but suspended: this session is disconnected, so nothing is answered. Press Reconnect to bring it back.
+                  </span>
+                )}
                 {openwa.migrationV13Applied === false && (
                   <span className="mt-1 block text-xs text-amber-600">
                     Saving this switch needs migration_v13_openwa_auto_reply.sql — run it once in the Supabase SQL editor.
@@ -311,8 +323,14 @@ export default function Channels() {
               </span>
             </label>
             <div className="flex flex-wrap gap-2">
-              <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
-              <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>
+              {openwa.connected ? (
+                <button onClick={disconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Disconnect</button>
+              ) : (
+                <button onClick={reconnectOpenwa} disabled={busy} className="btn-primary !py-2 text-xs">Reconnect</button>
+              )}
+              {openwa.connected && (
+                <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>
+              )}
               <button onClick={loadDiagnostics} disabled={busy} className="btn-secondary !py-2 text-xs">Diagnose group replies</button>
             </div>
             <label className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3.5 py-3">
