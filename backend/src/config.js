@@ -59,6 +59,15 @@ const config = {
     baseUrl: process.env.OPENWA_BASE_URL || '',
     apiKey: process.env.OPENWA_API_KEY || '',            // server-only; never exposed to the frontend
     webhookSecret: process.env.OPENWA_WEBHOOK_SECRET || '', // >= 16 chars; signs OpenWA webhook deliveries
+    // Who answers inbound WhatsApp messages (V13):
+    //   off (default) — "Muse mode": the backend never replies. It counts
+    //                   incoming messages per chat (lib/waPending.js) and serves
+    //                   GET /wa-pending so Muse's event hook wakes only on real
+    //                   traffic; Muse replies through OpenWA herself.
+    //   on            — original behaviour: this backend answers the message
+    //                   itself through the existing RAG/Groq pipeline.
+    // Nothing was deleted: flipping this back to `on` restores self-replying.
+    autoReply: /^(1|true|yes|on)$/i.test(String(process.env.WHATSAPP_AUTO_REPLY || '').trim()),
   },
 
   // Chat session isolation — HMAC secret binding visitor sessions to their org.

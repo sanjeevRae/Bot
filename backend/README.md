@@ -47,6 +47,7 @@ Run `supabase/schema.sql` in the Supabase SQL Editor once. It creates all tables
 | POST | `/api/org/openwa/reconnect` | JWT | Ask OpenWA to (re)start the org's session |
 | POST | `/api/org/openwa/test` | JWT | Send a test WhatsApp message via OpenWA |
 | POST | `/api/webhooks/openwa` | HMAC (signed) | Inbound OpenWA webhook (message.received) |
+| GET | `/wa-pending` (and `/api/wa-pending`) | public | Pending WhatsApp counts for Muse's event hook (no message content) |
 | GET | `/widget.js?org=` | public | Widget loader script |
 | GET | `/bot/:orgId` | public | Hosted chat page |
 | GET | `/health` | public | Health check |
@@ -78,6 +79,7 @@ Customer WhatsApp → OpenWA session (your machine)
 | `OPENWA_BASE_URL` | `http://localhost:2785` | `https://wa.<your-domain>` (tunnel) |
 | `OPENWA_API_KEY` | OpenWA `X-API-Key` | same |
 | `OPENWA_WEBHOOK_SECRET` | ≥16-char string | same (both sides) |
+| `WHATSAPP_AUTO_REPLY` | `off` (default) | `off` = Muse answers, `on` = this backend answers |
 
 All three are **server-only** — never exposed to the browser.
 
@@ -93,3 +95,57 @@ The backend auto-registers the webhook on `POST /api/org/openwa/connect` pointin
 - Webhook HMAC-SHA256 (`X-OpenWA-Signature`) verified over the raw body.
 - The org for an inbound message is resolved **from the DB** (`whatsapp_connections`), never from the webhook payload.
 - `OPENWA_API_KEY`, `OPENWA_WEBHOOK_SECRET`, and Supabase keys are never logged or committed (`.env` is gitignored).
+
+---
+
+## Muse mode — event-driven WhatsApp (`WHATSAPP_AUTO_REPLY`)
+
+Instead of this backend answering WhatsApp itself, **Muse** (the external agent) can own the
+replies. The switch is one env var and nothing was deleted:
+
+| `WHATSAPP_AUTO_REPLY` | Who replies | What the backend does |
+|---|---|---|
+| `off` *(default)* | Muse | Never replies. Counts incoming messages per chat, serves `GET /wa-pending`, clears a chat when Muse's own outgoing message is seen. |
+| `on` | this backend | The original automatic reply path, exactly as it was (existing RAG/Groq/tools pipeline). Nothing is counted for Muse. |
+
+### Flow
+```
+Customer WhatsApp → OpenWA session → webhook POST /api/webhooks/openwa (HMAC)
+  → (auto-reply off) count as pending: chatId + count + timestamp, in memory
+Muse's hook: GET /wa-pending  → { new_messages, pending_chats, session_ready, mode }
+  → when new_messages > 0: read the messages through the OpenWA API, reply per the
+    reply playbook, mark the chat read
+  → OpenWA echoes Muse's own send back to the webhook (fromMe: true)
+  → backend clears that chat's pending entry (no ack API needed)
+  → when session_ready is false: Muse emails Meena about the outage
+```
+
+### The endpoint
+`GET /wa-pending` (also mounted as `/api/wa-pending`) — public, no auth, no DB call:
+
+```json
+{ "new_messages": 2, "pending_chats": ["97798XXXXXXXX@c.us"], "session_ready": true, "mode": "muse" }
+```
+
+- `new_messages` — pending inbound messages not yet handled by Muse.
+- `pending_chats` — chats holding pending messages, most recently active first.
+- `session_ready` — `false` only on real evidence (an authoritative "down" status, or
+  `WA_SESSION_DOWN_AFTER` consecutive failed probes of `GET /sessions/{id}`). Unknown
+  reads as `true` so a fresh process never causes a false outage alert.
+- `mode` — `"muse"` when this feed is authoritative; `"bot"` when the backend was switched
+  back to `on`, so Muse can stand down instead of racing it.
+
+Pending state is deliberately in memory, bounded (`WA_PENDING_MAX_CHATS`, oldest chats
+dropped first) and content-free — no message text is ever stored, which is why the endpoint
+can stay unauthenticated. A restart loses counts: they are only a wake-up signal, and OpenWA
+remains the source of truth for what was actually said. The hook's frequent polls also keep a
+sleeping Render instance awake.
+
+### Rollback
+Set `WHATSAPP_AUTO_REPLY=on` and the backend goes straight back to self-replying. One flag,
+no deploy of old code.
+
+### Test
+`npm run test:unit` (from `backend/`) drives the whole contract offline — no credentials, no
+gateway, no DB: signed webhook in, pending counted, outbound echo clears it, readiness flips
+on lifecycle events.

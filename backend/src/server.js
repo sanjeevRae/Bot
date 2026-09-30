@@ -72,6 +72,9 @@ app.use('/bot', publicCors);
 app.use('/api/channels/webhook', publicCors);
 // V11 provider webhooks are public too (Telegram & Viber must reach them).
 app.use('/api/webhooks', publicCors);
+// Muse's OpenWA event hook polls the pending feed (counts + chat ids only).
+app.use('/wa-pending', publicCors);
+app.use('/api/wa-pending', publicCors);
 app.use('/widget.js', helmetPublic);
 app.use('/logo.webp', helmetPublic);
 app.use('/logo.png', helmetPublic);
@@ -94,6 +97,11 @@ app.use('/api/channels', require('./routes/channels'));
 const { webhookRouter, orgRouter } = require('./routes/openwa');
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/org/openwa', orgRouter);
+// V13 Muse event hook: cheap public pending-message feed for WhatsApp (OpenWA).
+// Mounted with and without the /api prefix so Muse can point at the base URL.
+const waPendingRoutes = require('./routes/waPending');
+app.use('/wa-pending', waPendingRoutes);
+app.use('/api/wa-pending', waPendingRoutes);
 // Telegram + Viber (V11): provider webhooks + per-org bot token management
 const { webhookRouter: botWebhooks, orgRouter: botOrg } = require('./routes/telegramViber');
 app.use('/api/webhooks', botWebhooks);

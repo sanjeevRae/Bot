@@ -7,6 +7,7 @@ const openwa = require('../services/openwa');
 const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
 const { planInbound, describeInbound, digitsOf, unownedLidMentions } = require('../lib/openwaInbound');
+const waPending = require('../lib/waPending');
 const diag = require('../lib/openwaDiagnostics');
 
 // ============================================================
@@ -15,6 +16,13 @@ const diag = require('../lib/openwaDiagnostics');
 //  - Management: org-scoped endpoints for the Channels page (status/connect/disconnect/reconnect/test)
 // Tenant isolation: the org for an inbound message is resolved from the stored
 // `whatsapp_connections` row by session id — NEVER trusted from the webhook payload.
+//
+// V13 reply modes — one switch, `WHATSAPP_AUTO_REPLY` (config.openwa.autoReply):
+//  - off (default) "Muse mode": this backend NEVER replies. Each incoming message
+//    is counted as pending (lib/waPending.js), and a chat is cleared again as soon
+//    as one of our own outbound messages to it is observed. GET /wa-pending then
+//    tells Muse's event hook when to wake up and answer through OpenWA herself.
+//  - on "bot mode": the original self-replying pipeline below, untouched.
 // ============================================================
 
 const webhookRouter = express.Router();
@@ -116,7 +124,11 @@ async function handleOpenwaEvent(payload) {
   const { event, sessionId, idempotencyKey } = (payload && typeof payload === 'object') ? payload : {};
   if (!event || !sessionId) return;
   if (event !== 'message.received') {
-    // Ignore lifecycle / other event types safely (no processing, no error)
+    // Ignore lifecycle / other event types safely (no processing, no error).
+    // Muse mode does care about two of them: a session going up/down (readiness
+    // for GET /wa-pending) and an outbound echo on any event name (that clears
+    // the chat's pending entry). Both are cheap in-memory notes.
+    if (!config.openwa.autoReply) waPending.noteSessionEvent(event, sessionId, payload.data);
     return;
   }
   if (isDuplicate(idempotencyKey)) {
@@ -133,6 +145,31 @@ async function handleOpenwaEvent(payload) {
     // accounts, so knowing it is what makes "was I mentioned?" answerable later.
     openwa.learnOwnLid(sessionId, data.from);
     openwa.learnOwnLid(sessionId, data.author);
+    // Muse mode: our own message going out to a chat means that chat was handled,
+    // so it leaves the pending list — the only acknowledgement protocol needed.
+    if (!config.openwa.autoReply) waPending.markHandled(sessionId, data);
+    return;
+  }
+
+  // Muse mode: count the message, then stop. Nothing below this point runs, so
+  // the backend sends no reply and spends no tokens — Muse reads the real
+  // messages from the OpenWA API and answers them herself (lib/waPending.js).
+  if (!config.openwa.autoReply) {
+    const counted = waPending.markIncoming(sessionId, data);
+    diag.record({
+      kind: 'inbound',
+      action: 'pending',
+      reason: 'muse-mode',
+      sessionId,
+      chatId: counted ? counted.chatId : (data.chatId || data.from || null),
+      pending: counted ? counted.count : null,
+      isGroup: data.isGroup === true || String(data.chatId || data.from || '').endsWith('@g.us'),
+    });
+    console.log('[OpenWA] Message counted for Muse (auto-reply off)', {
+      sessionId,
+      chatId: counted ? counted.chatId : null,
+      pending: counted ? counted.count : null,
+    });
     return;
   }
 
@@ -333,6 +370,7 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
   }
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const base = backendUrl.replace(/\/+$/, '');
   res.json({
     openwa: {
       baseUrlConfigured: !!config.openwa.baseUrl,
@@ -344,7 +382,13 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
       status: (conn?.status === 'disconnected' || conn?.status === 'error')
         ? conn.status                                   // respect the soft disconnect switch
         : (live?.status || conn?.status || 'disconnected'),
-      webhookUrl: `${backendUrl.replace(/\/+$/, '')}/api/webhooks/openwa`,
+      webhookUrl: `${base}/api/webhooks/openwa`,
+      // V13: who answers inbound WhatsApp. `true` = this backend replies itself;
+      // `false` (default) = Muse mode, where the backend only counts messages and
+      // serves the pending feed below (see lib/waPending.js).
+      autoReply: config.openwa.autoReply,
+      mode: config.openwa.autoReply ? 'bot' : 'muse',
+      pendingUrl: `${base}/wa-pending`,
     },
   });
 });

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node tests/widget.e2e.js && node tests/knowledge.e2e.js"
+    "test": "node tests/widget.e2e.js && node tests/knowledge.e2e.js",
+    "test:unit": "node tests/waPending.unit.js"
   },
   "engines": {
     "node": ">=18.0.0"
