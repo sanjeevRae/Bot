@@ -85,6 +85,7 @@ const mirror = new Map();
 /** True once a write proved the table is missing: count in memory, warn once. */
 let mirrorOnly = false;
 let warnedMissingTable = false;
+let warnedMissingColumns = false;
 let lastPruneAt = 0;
 let lastReadWarnAt = 0;
 
@@ -226,18 +227,32 @@ async function lookupOrgId(sessionId) {
 /**
  * Store one inbound message. Idempotent on `event_key`, so a retried delivery (or
  * a retry after a restart) can never double-count.
+ *
+ * Group mentions carry everything Muse needs to answer in the group tagging the
+ * asker (author LID + name, waMessageId, body, which of our identities matched) —
+ * direct messages only ever reach this function, never the public feed's detail
+ * array, so `details` writes them for groups alone.
  * @returns {Promise<{inserted: boolean, stored: boolean}>} `stored: false` means
  *   "kept in memory instead" — never "lost".
  */
-async function storePending(sessionId, chatId, data, idempotencyKey, organizationId) {
+async function storePending(sessionId, chatId, data, idempotencyKey, organizationId, mention) {
   if (mirrorOnly) return { inserted: true, stored: false };
   const messageId = data && typeof data.id === 'string' ? data.id.trim() : '';
+  const mentionedIds = mention && Array.isArray(mention.mentionedIds) ? mention.mentionedIds : [];
   const row = {
     session_id: sessionId,
     chat_id: chatId,
     message_id: messageId || null,
     event_key: eventKeyFor(sessionId, data, idempotencyKey),
     is_group: String(chatId).endsWith('@g.us'),
+    ...(mention && mention.isGroupDetail ? {
+      author: typeof data.author === 'string' ? data.author.trim().slice(0, 80) : null,
+      author_name: typeof (data.senderName || data.pushName) === 'string'
+        ? String(data.senderName || data.pushName).trim().slice(0, 120) : null,
+      body: typeof data.body === 'string' ? data.body.slice(0, 4000) : null,
+      mentioned_ids: mentionedIds.join(',').slice(0, 400) || null,
+      match_reason: typeof mention.matchedBy === 'string' ? mention.matchedBy.slice(0, 32) : null,
+    } : {}),
     ...(organizationId ? { organization_id: organizationId } : {}),
   };
   try {
@@ -264,15 +279,35 @@ async function storePending(sessionId, chatId, data, idempotencyKey, organizatio
   }
 }
 
+/** Row read columns for the pending feed with per-message reply details. */
+const PENDING_DETAIL_COLUMNS =
+  'id, session_id, chat_id, received_at, is_group, message_id, author, author_name, body, mentioned_ids, match_reason';
+/** Pre-V15 fallback: an un-migrated table cannot serve details, only counts. */
+const PENDING_BASE_COLUMNS = 'id, session_id, chat_id, received_at';
+
 /** Every still-unanswered row (newest first, capped by PENDING_ROW_LIMIT). */
 async function loadPendingRows() {
   const supabaseAdmin = require('./supabase');
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from(TABLE)
-    .select('id, session_id, chat_id, received_at')
+    .select(PENDING_DETAIL_COLUMNS)
     .eq('status', 'pending')
     .order('received_at', { ascending: false })
     .limit(PENDING_ROW_LIMIT);
+  if (error && /author|author_name|body|mentioned_ids|match_reason/i.test(error.message || '')) {
+    // TABLE exists but migration_v15 has not run: the counts keep working, the
+    // details array stays empty until the admin runs it.
+    if (!warnedMissingColumns) {
+      warnedMissingColumns = true;
+      console.warn('[waPending] wa_pending_messages has no detail columns — run migration_v15_wa_group_mentions.sql (counts keep working, reply details stay empty until then)');
+    }
+    ({ data, error } = await supabaseAdmin
+      .from(TABLE)
+      .select(PENDING_BASE_COLUMNS)
+      .eq('status', 'pending')
+      .order('received_at', { ascending: false })
+      .limit(PENDING_ROW_LIMIT));
+  }
   if (error) throw new Error(error.message);
   return data || [];
 }
@@ -375,15 +410,20 @@ async function pruneStore() {
  * log): the owner disconnecting the session is not a reason to drop a prospect's
  * message, and Muse decides what to do with it.
  *
+ * `mention` arrives from the mention gate (routes/openwa.js) for counted group
+ * messages and turns on the reply-hint fields in the row; it is what the consumer
+ * uses to answer the right person in the right group.
+ *
  * @returns {Promise<{chatId: string, count: number, stored: boolean, duplicate: boolean}|null>}
  */
-async function markIncoming(sessionId, data, { idempotencyKey, organizationId } = {}) {
+async function markIncoming(sessionId, data, { idempotencyKey, organizationId, mention, facts } = {}) {
   if (!sessionId) return null;
   const chatId = inboundChatIdOf(data);
   if (!chatId) return null;
 
   const org = organizationId === undefined ? await lookupOrgId(sessionId) : organizationId;
-  const { inserted, stored } = await storePending(sessionId, chatId, data, idempotencyKey, org);
+  const detail = mention && mention.isGroupDetail ? { ...mention, isGroupDetail: true } : null;
+  const { inserted, stored } = await storePending(sessionId, chatId, data, idempotencyKey, org, detail);
   const entry = inserted
     ? mirrorBump(sessionId, chatId)
     : (mirror.get(mirrorKey(sessionId, chatId)) || { count: 0 });
@@ -537,9 +577,43 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // the feed
 // ------------------------------------------------------------------
 
-/** Group rows into the shape the feed reports: one entry per chat. */
+/**
+ * Group rows into the shape the feed reports: one entry per chat, plus the
+ * newest pending messages per chat so the consumer can answer the right person
+ * without a second round trip to the gateway.
+ *
+ * Each detail carries `chat_id` (the group to answer in), `message_id`
+ * (the exact WhatsApp message), `author` / `author_name` (who to tag), `body`
+ * (what they asked, capped for transport), and `matched_by` (how the bot's own
+ * mention was recognised — the audit trail for "why did this wake me").
+ *
+ * The detail array is capped by PENDING_DETAIL_LIMIT (newest first). The chat
+ * list and total never depend on it: counts and chat ids always reflect every
+ * pending row, so a huge inbox degrades to "counts only" rather than lying.
+ */
+const PENDING_DETAIL_LIMIT = Math.max(0, parseInt(process.env.WA_PENDING_DETAIL_LIMIT || '50', 10) || 0);
+const PENDING_BODY_CHARS = Math.max(80, parseInt(process.env.WA_PENDING_BODY_CHARS || '1000', 10) || 1000);
+
+function toDetail(r) {
+  return {
+    chat_id: r.chat_id,
+    session_id: r.session_id,
+    is_group: r.is_group === true,
+    message_id: r.message_id || null,
+    author: r.author || null,
+    author_name: r.author_name || null,
+    body: typeof r.body === 'string' ? r.body.slice(0, PENDING_BODY_CHARS) : null,
+    mentioned_ids: typeof r.mentioned_ids === 'string'
+      ? r.mentioned_ids.split(',').map((s) => s.trim()).filter(Boolean)
+      : [],
+    matched_by: r.match_reason || null,
+    received_at: r.received_at || null,
+  };
+}
+
 function aggregateRows(rows) {
   const byChat = new Map();
+  const details = [];
   rows.forEach((r) => {
     const key = `${r.session_id}|${r.chat_id}`;
     const at = Date.parse(r.received_at) || 0;
@@ -550,12 +624,14 @@ function aggregateRows(rows) {
     } else {
       byChat.set(key, { sessionId: r.session_id, chatId: r.chat_id, count: 1, lastAt: at });
     }
+    if (details.length < PENDING_DETAIL_LIMIT) details.push({ at, detail: toDetail(r) });
   });
   const chats = Array.from(byChat.values()).sort((a, b) => b.lastAt - a.lastAt);
   return {
     // The total stays exact even when the reported chat list is capped.
     total: chats.reduce((sum, c) => sum + c.count, 0),
     chats: chats.slice(0, PENDING_MAX_CHATS),
+    pending: details.sort((a, b) => b.at - a.at).map((d) => d.detail),
   };
 }
 
@@ -563,14 +639,15 @@ function aggregateRows(rows) {
 function aggregateMirror() {
   const all = Array.from(mirror.values());
   const chats = all.slice().sort((a, b) => b.lastAt - a.lastAt).slice(0, PENDING_MAX_CHATS);
-  return { total: all.reduce((sum, e) => sum + e.count, 0), chats };
+  return { total: all.reduce((sum, e) => sum + e.count, 0), chats, pending: [] };
 }
 
 /**
- * The public contract with Muse: counts, chat ids, and whether the link is up.
- * One indexed read over a small table (plus a cached mode/session lookup); a
- * stale readiness value just schedules a background probe for the next poll.
- * @returns {Promise<{new_messages:number, pending_chats:string[], session_ready:boolean, mode:'muse'|'bot'}>}
+ * The public contract with Muse: counts, chat ids, reply details, and whether
+ * the link is up. One indexed read over a small table (plus a cached mode/session
+ * lookup); a stale readiness value just schedules a background probe for the next
+ * poll.
+ * @returns {Promise<{new_messages:number, pending_chats:string[], pending:object[], session_ready:boolean, mode:'muse'|'bot'}>}
  */
 async function snapshot() {
   // Housekeeping hangs off the poll so nothing has to own a timer; it is
@@ -618,6 +695,12 @@ async function snapshot() {
   return {
     new_messages: view.total,
     pending_chats: view.chats.map((c) => c.chatId),
+    // Per-message reply hints for the consumer: group id to answer in, WhatsApp
+    // message id, author LID/name to tag, what they asked, and how the bot's own
+    // mention was recognised. Only ever populated for groups: a direct message
+    // needs no tag and its content is read from the gateway. Purely additive —
+    // every consumer that reads only the four fields above keeps working.
+    pending: view.pending || [],
     // Unknown reads as up: Muse alerts Meena on `false`, and a cold process must
     // not raise a false outage. A real outage is confirmed by the probe above or
     // by a lifecycle event, and shows up on the next poll.
@@ -666,6 +749,7 @@ function reset() {
   orgLookup.value = null;
   orgLookup.at = 0;
   orgLookup.resolved = false;
+  warnedMissingColumns = false;
 }
 
 module.exports = {

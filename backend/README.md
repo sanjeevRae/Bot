@@ -44,8 +44,9 @@ Run `supabase/schema.sql` in the Supabase SQL Editor once. It creates all tables
 | GET | `/api/org/openwa/status` | JWT | Self-hosted OpenWA connection status |
 | POST | `/api/org/openwa/connect` | JWT | Verify + connect an OpenWA session |
 | POST | `/api/org/openwa/disconnect` | JWT | Soft-off the org's session: stops replies until Reconnect (mapping + audit row kept) |
-| POST | `/api/org/openwa/reconnect` | JWT | Restart the OpenWA session and resume answering |
+| POST | `/api/org/openwa/reconnect` | JWT | Reconcile + restart the session: repair the webhook first (fixes group filters), then start when down, then resume answering |
 | POST | `/api/org/openwa/settings` | JWT | Per-org WhatsApp behaviour: `{ groupRepliesEnabled }` (V12), `{ autoReply }` (V13) |
+| POST | `/api/org/openwa/webhook/repair` | JWT | Inspect the session's webhooks; delete group-excluding filters and re-register clean (no-op when already correct) |
 | POST | `/api/org/openwa/test` | JWT | Send a test WhatsApp message via OpenWA |
 | POST | `/api/webhooks/openwa` | HMAC (signed) | Inbound OpenWA webhook (message.received) |
 | GET | `/wa-pending` (and `/api/wa-pending`) | public | Pending WhatsApp counts for Muse's event hook (no message content) |
@@ -139,14 +140,32 @@ the switch, not a 30-second timer.
 ### Flow
 ```
 Customer WhatsApp → OpenWA session → webhook POST /api/webhooks/openwa (HMAC)
-  → (auto-reply off) count as pending: chatId + count + timestamp, in memory
-Muse's hook: GET /wa-pending  → { new_messages, pending_chats, session_ready, mode }
+  → (Muse mode) mention gate: direct message, or a group message that
+    @-mentions this bot's number / @lid / display name
+  → record as pending: chatId + author + waMessageId + body, BEFORE the 200
+Muse's hook: GET /wa-pending  → { new_messages, pending_chats, pending, session_ready, mode }
   → when new_messages > 0: read the messages through the OpenWA API, reply per the
-    reply playbook, mark the chat read
+    reply playbook (groups: answer in the group and tag `author`), mark the chat read
   → OpenWA echoes Muse's own send back to the webhook (fromMe: true)
-  → backend clears that chat's pending entry (no ack API needed)
+  → backend clears that chat's pending rows (no ack API needed)
   → when session_ready is false: Muse emails Meena about the outage
 ```
+
+Group messages pass a **mention gate** before anything is written: only a line that
+@-mentions this bot is work for Muse. The mention may arrive as the stored number
+(`@9779712039906`), the session's privacy id (`@248065197879524@lid` — learned from
+the group roster or resolved through the contacts lookup, both cached) or the display
+name. Unaddressed chatter in a busy team group is never counted, and the backend
+never replies in Muse mode — Muse does, so there are no double replies.
+
+If the gateway's webhook carries a group-excluding filter (`{ "isGroup": false }`),
+group messages die at the gateway before our code runs. **Reconnect now repairs the
+wiring itself** (it inspects the session's hooks before starting anything), and you
+can always repair explicitly: `POST /api/org/openwa/webhook/repair` — or the
+**Fix webhook** button on the Channels card, which appears next to a warning when
+`GET /api/org/openwa/status` reports `"webhookFiltered": true`. The repair deletes a
+filtered hook where the gateway build allows and re-registers a clean one — no filters,
+`message.received` + the HMAC secret — and is a strict no-op on an already-correct hook.
 
 ### The endpoint
 `GET /wa-pending` (also mounted as `/api/wa-pending`) — public, no auth, no DB call:
@@ -155,13 +174,45 @@ Muse's hook: GET /wa-pending  → { new_messages, pending_chats, session_ready, 
 { "new_messages": 2, "pending_chats": ["97798XXXXXXXX@c.us"], "session_ready": true, "mode": "muse" }
 ```
 
+Group mentions add per-message reply hints (`pending`, newest first, capped):
+
+```json
+{
+  "new_messages": 1,
+  "pending_chats": ["120363428240535325@g.us"],
+  "pending": [
+    {
+      "chat_id": "120363428240535325@g.us",
+      "session_id": "03bc39c2-…",
+      "is_group": true,
+      "message_id": "false_202229004943510@lid_…",
+      "author": "202229004943510@lid",
+      "author_name": "Sanjeev",
+      "body": "Recommend some good business names for the online e-commerce @248065197879524",
+      "mentioned_ids": ["248065197879524@lid"],
+      "matched_by": "mentionedIds",
+      "received_at": "2026-09-30T20:05:00.000Z"
+    }
+  ],
+  "session_ready": true,
+  "mode": "muse"
+}
+```
+
 - `new_messages` — pending inbound messages not yet handled by Muse.
 - `pending_chats` — chats holding pending messages, most recently active first.
+- `pending` — the reply hints (groups only): answer in `chat_id`, tag `author`,
+  quote/use `message_id`; `matched_by` records how the bot's own mention was
+  recognised. Capped by `WA_PENDING_DETAIL_LIMIT`, bodies by `WA_PENDING_BODY_CHARS`.
 - `session_ready` — `false` only on real evidence (an authoritative "down" status, or
   `WA_SESSION_DOWN_AFTER` consecutive failed probes of `GET /sessions/{id}`). Unknown
   reads as `true` so a fresh process never causes a false outage alert.
 - `mode` — `"muse"` when this feed is authoritative; `"bot"` when the backend was switched
   back to `on`, so Muse can stand down instead of racing it.
+
+Because `pending` names who said what, set `WA_PENDING_TOKEN` if this feed is reachable
+from the open internet: with it set, the details require `?token=…` or an `x-wa-token`
+header, while counts / chat ids / mode stay public.
 
 Pending state is a table, not process memory (`wa_pending_messages`,
 **run [`supabase/migration_v14_wa_pending.sql`](./supabase/migration_v14_wa_pending.sql) once**).

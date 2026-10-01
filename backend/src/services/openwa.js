@@ -213,6 +213,24 @@ async function listWebhooks(sessionId) {
 }
 
 /**
+ * Remove one webhook by id. Best effort by design: gateway builds differ in how
+ * they address a hook (id in the path, or a body) and a missing hook is not an
+ * error worth failing a repair over.
+ */
+async function deleteWebhook(sessionId, hookId) {
+  if (!hookId) return null;
+  try {
+    return await request(
+      `/api/sessions/${encodeURIComponent(sessionId)}/webhooks/${encodeURIComponent(hookId)}`,
+      { method: 'DELETE' }
+    );
+  } catch (err) {
+    console.warn('[openwa] webhook delete failed:', err.message);
+    return null;
+  }
+}
+
+/**
  * Groups this session is a member of, normalised to `{ id, name, participants }`.
  * Gateways differ on the envelope (`[]`, `{ groups: [] }`, `{ data: [] }`) and on
  * the field names, so every known shape is accepted and unknown ones are dropped
@@ -384,6 +402,7 @@ module.exports = {
   sendLocation,
   downloadMedia,
   registerWebhook,
+  deleteWebhook,
   listWebhooks,
   listGroups,
   resolvePhone,

@@ -30,23 +30,54 @@ const express = require('express');
 // only that host leaves the test's own calls to the local express server alone.
 // `gateway.status` / `gateway.startError` are scripted per check: the point under
 // test is that Reconnect follows the gateway's truth instead of forcing /start.
+// `gateway.participants` is the group roster the mention gate learns our own
+// `@lid` from; `gateway.webhooks` drives the repair checks.
 const realFetch = global.fetch;
 const gateway = {
   calls: [],
   status: 'CONNECTED',   // what GET /api/sessions/:id reports
   startError: null,      // when set, POST .../start fails with this message
   session: { phone: '9779712039906', pushName: 'Chitra AI' },
+  participants: [],      // group roster entries { number, id } for GET .../groups/:id
+  webhooks: [],          // what GET .../webhooks lists
+  registered: [],        // POST /webhooks bodies seen here
+  deleted: [],           // DELETE /webhooks/:id calls seen here
 };
+function gatewaySessionBody() {
+  return { ...gateway.session, status: gateway.status };
+}
 global.fetch = async (url, opts) => {
   const u = String(url);
   if (u.startsWith('http://openwa.test')) {
     const method = (opts && opts.method) || 'GET';
     gateway.calls.push(`${method} ${u}`);
-    if (u.endsWith('/start') && gateway.startError) {
+    const m = u.match(/\/api\/sessions\/([^/]+)(\/.*)?$/);
+    const rest = (m && m[2]) || '';
+    if (method === 'DELETE' && rest.startsWith('/webhooks/')) {
+      gateway.deleted.push(decodeURIComponent(rest.slice('/webhooks/'.length)));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+    }
+    if (rest === '/webhooks' && method === 'POST') {
+      try { gateway.registered.push(JSON.parse((opts && opts.body) || '{}')); } catch { /* ignore */ }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+    }
+    if (rest === '/webhooks') {
+      return { ok: true, status: 200, text: async () => JSON.stringify(gateway.webhooks) };
+    }
+    if (rest.startsWith('/groups/')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ participants: gateway.participants }),
+      };
+    }
+    if (rest === '/start' && gateway.startError) {
       return { ok: false, status: 409, text: async () => JSON.stringify({ message: gateway.startError }) };
     }
-    const body = u.endsWith('/start') ? {} : { ...gateway.session, status: gateway.status };
-    return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    if (rest === '/start') {
+      return { ok: true, status: 200, text: async () => JSON.stringify({}) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify(gatewaySessionBody()) };
   }
   return realFetch(url, opts);
 };
@@ -61,7 +92,9 @@ global.fetch = async (url, opts) => {
 // ---------- wa_pending_messages: a real (in-memory) table ----------
 // The durable store is the fix for the reported loss, so it is simulated
 // faithfully: upsert is idempotent on event_key, updates mark rows handled, and
-// the builder is awaitable exactly like a PostgREST query.
+// the builder is awaitable exactly like a PostgREST query. The V15 detail
+// columns ride along in op.payload (spread into the row), so group-mention
+// details survive the round trip the same way.
 const pendingDb = { rows: [], nextId: 1 };
 const rowMatches = (row, filters) => filters.every(([op, col, val]) => {
   if (op === 'eq') return String(row[col]) === String(val);
@@ -121,6 +154,7 @@ const fakeSupabase = {
   modeReads: 0,           // the V13 switch was read
   autoReplyEnabled: false, // what the Channels toggle "stores"
   rowStatus: 'connected',  // whatsapp_connections.status (the Disconnect soft switch)
+  phoneNumber: '9779712039906', // the stored session number behind mention matching
   hasColumn: true,        // false → a deploy that predates migration_v13
   mapped: true,           // false → no whatsapp_connections row for the session
   patches: [],            // what /settings wrote
@@ -140,6 +174,7 @@ const fakeSupabase = {
       else if (c.includes('organization_id')) { fakeSupabase.orgLookups += 1; b._kind = 'org'; }
       else if (c.includes('auto_reply_enabled')) { fakeSupabase.modeReads += 1; b._kind = 'mode'; }
       else if (c === '*') b._kind = 'conn';
+      else if (c.includes('phone_number')) b._kind = 'identity';
       else if (c.includes('openwa_session_id')) b._kind = 'session';
       return b;
     };
@@ -177,13 +212,19 @@ const fakeSupabase = {
             data: {
               id: 'CONN-1',
               openwa_session_id: 'chitra-ai',
-              phone_number: '9779712039906',
+              phone_number: fakeSupabase.phoneNumber,
               status: fakeSupabase.rowStatus,
               group_replies_enabled: true,
               auto_reply_enabled: fakeSupabase.autoReplyEnabled,
             },
             error: null,
           }
+          : { data: null, error: null };
+      }
+      if (b._kind === 'identity') {
+        // The mention gate's own-number read (routes/openwa.js ownNumberFor).
+        return fakeSupabase.mapped
+          ? { data: { phone_number: fakeSupabase.phoneNumber }, error: null }
           : { data: null, error: null };
       }
       if (b._kind === 'session') {
@@ -372,28 +413,26 @@ const server = app.listen(0, async () => {
     await deliver(outgoing('248065197879524@lid', { from: '9779712039906@lid' }));
     check('an outbound echo never adds a chat (fromMe is not an inbound message)',
       (await pending()).pending_chats.length === 1);
-
-    await deliver(incoming(GROUP, { from: GROUP, data: { isGroup: true, author: '9779810135468@c.us' } }));
-    await until(async () => (await pending()).new_messages === 3);
-    p = await pending();
-    check('group messages are counted too (chatId is the group)', p.pending_chats.includes(GROUP),
-      JSON.stringify(p.pending_chats));
-
-    await deliver(outgoing(CHAT_A));
-    await until(async () => (await pending()).new_messages === 1);
-    p = await pending();
-    check('clearing one chat leaves the others untouched', p.pending_chats[0] === GROUP,
-      JSON.stringify(p));
-
     // The same conversation can be addressed as @lid on one side and @c.us on the
     // other (privacy ids), so clearing falls back to the digits of the JID.
+    // CHAT_B was cleared above, so clearing CHAT_A empties the feed.
     await deliver(incoming(CHAT_A));
-    await until(async () => (await pending()).new_messages === 2);
+    await until(async () => (await pending()).new_messages === 3);
     await deliver(outgoing('9779810135468@lid'));
-    await until(async () => (await pending()).new_messages === 1);
-    p = await pending();
+    await until(async () => (await pending()).new_messages === 0);
     check('a @lid-form outbound echo still clears the @c.us pending chat',
-      p.new_messages === 1 && p.pending_chats[0] === GROUP, JSON.stringify(p));
+      (await pending()).pending_chats.length === 0, JSON.stringify(await pending()));
+
+    // The OLD group contract ("every group line counts") is gone: in a busy team
+    // group only a line that @-mentions the bot is work for Muse, so plain chatter
+    // must add nothing (section 12 covers the mention path).
+    const beforeChatter = (await pending()).new_messages;
+    await deliver(incoming(GROUP, { from: GROUP, data: { isGroup: true, author: '9779810135468@c.us' } }));
+    await sleep(150);
+    p = await pending();
+    check('group chatter without a mention of the bot is not counted',
+      p.new_messages === beforeChatter && !p.pending_chats.includes(GROUP), JSON.stringify(p));
+
 
 
     // ==================== 6. session readiness ====================
@@ -671,6 +710,145 @@ const server = app.listen(0, async () => {
       incidentFeed.new_messages === 2 && incidentFeed.pending_chats.length === 1,
       JSON.stringify(incidentFeed));
 
+    fakeSupabase.rowStatus = 'connected';
+    waMode.invalidate(SESSION);
+    await waPending.clearPending();
+
+    // ============ 12. group mentions reach the feed in Muse mode ============
+    // Reported 2026-09-30 ~20:05 NPT: "@248065197879524 recommend some good
+    // business names" in 120363428240535325@g.us never surfaced — feed stayed 0.
+    const GROUP_ID = '120363428240535325@g.us';
+    const MENTION_LID = '248065197879524@lid';
+    fakeSupabase.autoReplyEnabled = false;
+    fakeSupabase.rowStatus = 'connected';
+    fakeSupabase.phoneNumber = '9779712039906';
+    waMode.invalidate(SESSION);
+    await waPending.clearPending();
+    gateway.participants = [{ number: '9779712039906', id: MENTION_LID }];
+
+    // (d) Plain chatter in the group is NOBODY's work: never written, never a reply.
+    const orgBeforeNoise = fakeSupabase.orgLookups;
+    const sendsBefore = gateway.calls.filter((c) => c.includes('/messages/send-text')).length;
+    await deliver(incoming(GROUP_ID, {
+      body: 'hey team, lunch tomorrow?',
+      data: { author: '149959471063139@lid', senderName: 'Teammate' },
+    }));
+    await sleep(150);
+    check('group chatter without a mention of the bot is never counted (anti-noise)',
+      (await pending()).new_messages === 0, JSON.stringify(await pending()));
+    check('...and the backend never answers it either',
+      fakeSupabase.orgLookups === orgBeforeNoise
+      && gateway.calls.filter((c) => c.includes('/messages/send-text')).length === sendsBefore,
+      `orgLookups=${fakeSupabase.orgLookups}`);
+
+    // (b) The reported case: our @lid in the body, author + name + waMessageId.
+    const mentionBody = 'Recommend some good business names for the online e-commerce @248065197879524';
+    const mentionMsgId = 'false_202229004943510@lid_MENTION01';
+    const mentionDelivery = incoming(GROUP_ID, {
+      body: mentionBody,
+      data: {
+        id: mentionMsgId,
+        author: '202229004943510@lid',
+        senderName: 'Sanjeev',
+        mentionedIds: [MENTION_LID],
+      },
+    });
+    await deliver(mentionDelivery);
+    await until(async () => (await pending()).new_messages === 1);
+    let mentionFeed = await pending();
+    check('a group @-mention of the bot counts exactly like a 1:1 message',
+      mentionFeed.new_messages === 1 && mentionFeed.pending_chats[0] === GROUP_ID,
+      JSON.stringify(mentionFeed));
+    const detail = (mentionFeed.pending || [])[0] || {};
+    check('the detail carries what Muse needs to answer in the group tagging the asker',
+      detail.chat_id === GROUP_ID && detail.is_group === true
+      && detail.message_id === mentionMsgId
+      && detail.author === '202229004943510@lid' && detail.author_name === 'Sanjeev'
+      && String(detail.body || '').includes('Recommend some good business names')
+      && Array.isArray(detail.mentioned_ids) && detail.mentioned_ids.includes(MENTION_LID)
+      && typeof detail.matched_by === 'string' && detail.matched_by.length > 0,
+      JSON.stringify(detail));
+    check('the backend does not answer a counted group mention itself (no double reply)',
+      fakeSupabase.orgLookups === orgBeforeNoise
+      && gateway.calls.filter((c) => c.includes('/messages/send-text')).length === sendsBefore,
+      `orgLookups=${fakeSupabase.orgLookups}`);
+
+    // The same delivery again (gateway retry — identical payload) → still 1;
+    // then Muse's group echo clears the group.
+    await deliver(mentionDelivery);
+    await sleep(100);
+    check('the same group mention redelivered is not counted twice',
+      (await pending()).new_messages === 1, JSON.stringify(await pending()));
+    await deliver(outgoing(GROUP_ID));
+    await until(async () => (await pending()).new_messages === 0);
+    check("Muse's group reply clears the group chat",
+      (await pending()).new_messages === 0
+      && fakeSupabase.pendingRows.every((r) => r.status !== 'pending'));
+
+    // A mention by our own NUMBER (no LID, no roster learning needed) counts too.
+    await deliver(incoming(GROUP_ID, {
+      body: 'hey @9779712039906, are you there?',
+      data: { id: 'GROUP-NUMBER-1', author: '149959471063139@lid', senderName: 'Teammate' },
+    }));
+    await until(async () => (await pending()).new_messages === 1);
+    check('a mention of the bot by its own number counts (body-number path)',
+      (await pending()).pending_chats[0] === GROUP_ID);
+
+
+    // ============ 13. a group-filtering webhook is detected and repaired ============
+    // Reported: group messages never arrived at all. Our own registration never
+    // sets filters, so the cause is a stale gateway hook carrying { isGroup: false }
+    // (or a wrong URL / missing event). /webhook/repair must fix that, and must
+    // leave a correct hook alone. The backend derives the hook URL from
+    // PUBLIC_BACKEND_URL, so point that at this test server for these checks.
+    const previousPublicUrl = process.env.PUBLIC_BACKEND_URL;
+    process.env.PUBLIC_BACKEND_URL = base;
+    const hookUrl = `${base}/api/webhooks/openwa`;
+
+    gateway.webhooks = [{ id: 'WH-FILTERED', url: hookUrl, events: ['message.received'], filters: { isGroup: false } }];
+    gateway.registered.length = 0;
+    gateway.deleted.length = 0;
+    let repair = await (await fetch(`${base}/api/org/openwa/webhook/repair`, { method: 'POST' })).json();
+    check('a group-filtering webhook is repaired (re-registered with no filters)',
+      repair.ok === true && repair.repaired === true && repair.reason === 'fixed'
+      && gateway.registered.length === 1 && !('filters' in gateway.registered[0]),
+      JSON.stringify({ repair, registered: gateway.registered }));
+    check('the filtered hook is deleted first so the gateway cannot fan out twice',
+      gateway.deleted.includes('WH-FILTERED'), JSON.stringify(gateway.deleted));
+    check('the clean registration still asks for message.received with the secret',
+      gateway.registered[0].events.includes('message.received')
+      && typeof gateway.registered[0].secret === 'string' && gateway.registered[0].secret.length > 0,
+      JSON.stringify(gateway.registered[0]));
+
+    // An already-correct hook is left exactly as it is.
+    gateway.webhooks = [{ id: 'WH-CLEAN', url: hookUrl, events: ['message.received'] }];
+    gateway.registered.length = 0;
+    gateway.deleted.length = 0;
+    repair = await (await fetch(`${base}/api/org/openwa/webhook/repair`, { method: 'POST' })).json();
+    check('a correctly wired webhook is never touched',
+      repair.repaired === false && repair.reason === 'already-clean'
+      && gateway.registered.length === 0 && gateway.deleted.length === 0,
+      JSON.stringify(repair));
+
+    // No hook at all → created.
+    gateway.webhooks = [];
+    gateway.registered.length = 0;
+    repair = await (await fetch(`${base}/api/org/openwa/webhook/repair`, { method: 'POST' })).json();
+    check('a missing webhook is created',
+      repair.repaired === true && repair.reason === 'created' && gateway.registered.length === 1,
+      JSON.stringify(repair));
+
+    // A hook that lost the event we rely on is repaired too.
+    gateway.webhooks = [{ id: 'WH-NOEVENT', url: hookUrl, events: ['session.status'] }];
+    gateway.registered.length = 0;
+    repair = await (await fetch(`${base}/api/org/openwa/webhook/repair`, { method: 'POST' })).json();
+    check('a webhook missing message.received is repaired',
+      repair.repaired === true && gateway.registered.length === 1,
+      JSON.stringify(repair));
+    if (previousPublicUrl === undefined) delete process.env.PUBLIC_BACKEND_URL;
+    else process.env.PUBLIC_BACKEND_URL = previousPublicUrl;
+
+    // Reset the harness to the default (Muse mode, connected) for a clean exit.
     fakeSupabase.rowStatus = 'connected';
     waMode.invalidate(SESSION);
     await waPending.clearPending();

@@ -116,6 +116,21 @@ export default function Channels() {
     setBusy(false);
   }
 
+  // V15: a stale gateway hook can silently drop group traffic before it reaches
+  // Chitra, which is invisible from the phone. Re-registering it clean is safe to
+  // press at any time — a correct hook is left exactly as it is.
+  async function repairWebhook() {
+    setBusy(true); setError('');
+    try {
+      const d = await api('/api/org/openwa/webhook/repair', { method: 'POST', body: JSON.stringify({}) });
+      setError(d.repaired
+        ? `Webhook ${d.reason === 'created' ? 'created' : 'repaired'} — group messages will now reach Chitra.`
+        : 'Webhook is already correct.');
+      await loadOpenwa();
+    } catch (e) { setError(e.message); }
+    setBusy(false);
+  }
+
   // Group chats stay silent unless the bot is @-mentioned; this is the org switch.
   async function toggleGroupReplies(next) {
     setBusy(true); setError('');
@@ -279,6 +294,13 @@ export default function Channels() {
             <p className="text-[13px] text-ink-500">
               Webhook: <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs">{openwa.webhookUrl}</code>
             </p>
+            {openwa.webhookFiltered === true && (
+              <p className="rounded-lg border border-amber-100 bg-amber-50/70 px-3.5 py-3 text-[13px] text-amber-700">
+                The OpenWA gateway is filtering group messages before they reach Chitra, so a group @-mention
+                can never be counted. Press <span className="font-medium">Fix webhook</span> to re-register it
+                without filters.
+              </p>
+            )}
             <p className="text-[13px] text-ink-500">
               Replies:{' '}
               <span className="font-medium">{openwa.autoReply ? 'Chitra AI (this backend)' : 'Muse (backend counts only)'}</span>
@@ -331,6 +353,7 @@ export default function Channels() {
               {openwa.connected && (
                 <button onClick={reconnectOpenwa} disabled={busy} className="btn-secondary !py-2 text-xs">Reconnect</button>
               )}
+              <button onClick={repairWebhook} disabled={busy} className="btn-secondary !py-2 text-xs">Fix webhook</button>
               <button onClick={loadDiagnostics} disabled={busy} className="btn-secondary !py-2 text-xs">Diagnose group replies</button>
             </div>
             <label className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50/60 px-3.5 py-3">
@@ -348,6 +371,13 @@ export default function Channels() {
                   <span className="font-medium">{openwa.phoneNumber || 'its number'}</span>; it then answers
                   in the group and tags the person who asked. Direct messages are never affected.
                 </span>
+                {!openwa.autoReply && (
+                  <span className="mt-0.5 block text-xs text-ink-400">
+                    In Muse mode Chitra never replies in groups itself: a mention of its number is counted on the
+                    pending feed above instead, so Muse can answer and tag the asker. Group chatter with no
+                    mention is ignored.
+                  </span>
+                )}
               </span>
             </label>
 

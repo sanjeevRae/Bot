@@ -6,7 +6,7 @@ const { requireAuth } = require('../middleware/auth');
 const openwa = require('../services/openwa');
 const { normalizeInbound } = require('../services/channelMedia');
 const { handleInbound, runChatForChannel } = require('./channels');
-const { planInbound, describeInbound, digitsOf, unownedLidMentions } = require('../lib/openwaInbound');
+const { matchedBy, mentionedOwnId, unownedLidMentions, normalizeWid, digitsOf, stripOwnMention, planInbound, describeInbound } = require('../lib/openwaInbound');
 const waPending = require('../lib/waPending');
 const waMode = require('../lib/waMode');
 const diag = require('../lib/openwaDiagnostics');
@@ -74,6 +74,197 @@ function verifySignature(rawBody, signature, secret) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Mention gate for the pending feed (V15). Answered BEFORE the ack, so the
+ * decision itself is durable: what is counted stays counted, and what is not
+ * counted is explained in the diagnostics instead of silently vanishing.
+ *
+ *   - direct message → always Muse's business (counted, with details)
+ *   - group message  → only when this session's own identity is @-mentioned.
+ *     A busy team group that is not talking to the bot must not wake Muse —
+ *     its chatter is never written here at all.
+ *
+ * Recognising our own mention reuses the bot path's machinery
+ * (lib/openwaInbound.js), with the stored number first and the gateway's
+ * display name as fallback. A mention of us can arrive as our number, our
+ * privacy id (`@248065197879524@lid` — learned deterministically from the group
+ * roster, or by resolving the offered mention), or our display name on builds
+ * that render that form. Unresolvable `@lid` mentions get one roster/resolver
+ * lookup each (both cached); after that the message stays out.
+ */
+async function mentionGate({ sessionId, data, chatId, ownDigits, ownName }) {
+  const isGroup = String(chatId || '').endsWith('@g.us');
+  if (!isGroup) {
+    return { counted: true, reason: 'direct', chatId, isGroup: false, mention: null };
+  }
+
+  const ownWid = ownDigits ? `${ownDigits}@c.us` : null;
+  let ownLids = openwa.getOwnLids(sessionId);
+
+  const attempt = () => {
+    const match = matchedBy(data, ownDigits, ownWid, ownName, ownLids);
+    if (!match) return null;
+    const mentionedIds = [data?.mentionedIds, data?.mentions]
+      .filter(Array.isArray)
+      .flat()
+      .map((m) => String(m))
+      .slice(0, 8);
+    return {
+      counted: true,
+      reason: match,
+      chatId,
+      isGroup: true,
+      // `isGroupDetail` arms the reply-hint columns in the pending row — the
+      // consumer needs them only for groups, where the group JID alone does not
+      // say who asked or what exactly they said.
+      mention: { matchedBy: match, mentionedIds, ownLids: ownLids.slice(0, 8), isGroupDetail: true },
+    };
+  };
+
+  const first = attempt();
+  if (first) return first;
+
+  // A mention of us can arrive as our privacy id, and the only way to recognise
+  // that is to learn our own LID first: the group roster pairs our number with
+  // our id deterministically, and the contacts lookup resolves an offered
+  // mention. Both are cached; both only run when the cheap checks missed, so a
+  // normal message costs nothing extra here.
+  if (ownDigits) {
+    await openwa.learnOwnLidFromGroup(sessionId, chatId, ownDigits);
+    ownLids = openwa.getOwnLids(sessionId);
+    const second = attempt();
+    if (second) return second;
+    for (const lid of unownedLidMentions(data, ownDigits, ownWid, ownLids)) {
+      const phone = await openwa.resolvePhone(sessionId, lid);
+      if (phone && digitsOf(phone) === ownDigits) {
+        ownLids = openwa.learnOwnLid(sessionId, lid);
+        break;
+      }
+    }
+    const third = attempt();
+    if (third) return third;
+  }
+
+  return { counted: false, reason: 'group-not-mentioned', chatId, isGroup: true, mention: null };
+}
+
+/**
+ * The session's own number for mention matching. The stored row is the reliable
+ * source — gateway builds only fill `phone` on some sessions — so the DB wins,
+ * with the gateway as fallback. Cached for the same reason as everywhere else.
+ */
+const identityCache = new Map(); // sessionId -> { value, at }
+const IDENTITY_TTL_MS = 10 * 60 * 1000;
+
+async function ownNumberFor(sessionId) {
+  const hit = identityCache.get(sessionId);
+  if (hit && Date.now() - hit.at < IDENTITY_TTL_MS) return hit.value;
+  let value = { ownDigits: null, ownName: null };
+  try {
+    const supabaseAdmin = require('../lib/supabase');
+    const { data: conn } = await supabaseAdmin
+      .from('whatsapp_connections')
+      .select('phone_number')
+      .eq('openwa_session_id', sessionId)
+      .limit(1)
+      .maybeSingle();
+    const identity = await openwa.getOwnIdentity(sessionId);
+    value = {
+      ownDigits: digitsOf(conn && conn.phone_number) || identity.digits || null,
+      ownName: identity.pushName || null,
+    };
+  } catch (err) {
+    console.warn('[OpenWA] own-number lookup failed:', err.message);
+  }
+  identityCache.set(sessionId, { value, at: Date.now() });
+  return value;
+}
+
+/**
+ * Does this hook exclude group traffic? `{ isGroup: false }` (or any false-y
+ * group gate) drops group messages at the gateway, which is invisible from the
+ * phone and from our logs — the single most confusing failure this integration
+ * has, so it is detected in one place and used by both the repair and /status.
+ */
+function hasGroupFilter(hook) {
+  const f = hook && hook.filters;
+  if (!f || typeof f !== 'object') return false;
+  return Object.entries(f).some(([k, v]) => /group/i.test(String(k)) && !v);
+}
+
+/** What the gateway says about this session's hooks — for /status, best effort. */
+async function webhookFilterState(sessionId) {
+  if (!sessionId) return null;
+  try {
+    const res = await openwa.listWebhooks(sessionId);
+    const hooks = Array.isArray(res) ? res : (res && (res.webhooks || res.data)) || [];
+    return hooks.some(hasGroupFilter);
+  } catch {
+    return null; // unknown — never claim a problem we could not verify
+  }
+}
+
+/**
+ * Make sure this session forwards `message.received` to our backend — with NO
+ * `filters`. A stale registration carrying e.g. `{ "isGroup": false }` would
+ * silently drop every group message at the gateway: nothing to count, nothing
+ * to answer, and nothing in our logs to explain the silence.
+ *
+ * Idempotent and safe to call from /connect, /reconnect and the repair button:
+ * a correctly wired hook is returned untouched; anything else (missing hook,
+ * missing event, or an excluding filter) is repaired. Filtered hooks are
+ * deleted where the build allows, then re-registered clean so the gateway does
+ * not fan out two deliveries of the same message.
+ */
+async function ensureWebhook(sessionId, url) {
+  const empty = (hooks = []) => ({ repaired: false, reason: 'unreachable', hook: null, hooks });
+  let hooks = [];
+  try {
+    const res = await openwa.listWebhooks(sessionId);
+    hooks = Array.isArray(res) ? res : (res && (res.webhooks || res.data)) || [];
+  } catch (err) {
+    console.warn('[OpenWA] webhook inspection failed:', err.message);
+    return empty();
+  }
+
+  const hookUrl = (h) => String((h && (h.url || h.target)) || '');
+  const hookId = (h) => h && (h.id || h._id || h.uuid || h.name);
+  const hookEvents = (h) => h && (h.events || h.event);
+
+  const hasEvent = (h, event) => {
+    const events = hookEvents(h);
+    if (Array.isArray(events)) return events.includes(event);
+    if (typeof events === 'string') return events === event;
+    // No event list on the hook: assume it fires everything (do not fight it).
+    return true;
+  };
+
+  const ours = hooks.find((h) => hookUrl(h) === String(url || '')) || null;
+
+  // A wrong-URL hook with a group filter would still eat group messages: delete
+  // it where the build allows so it stops dropping them.
+  for (const h of hooks) {
+    if (h !== ours && hasGroupFilter(h)) await openwa.deleteWebhook(sessionId, hookId(h));
+  }
+
+  const needsRepair = !ours || !hasEvent(ours, 'message.received') || hasGroupFilter(ours);
+  if (!needsRepair) return { repaired: false, reason: 'already-clean', hook: ours, hooks };
+
+  // Delete our own stale hook first where the build allows, so the gateway does
+  // not end up fanning out two deliveries of the same message.
+  if (ours && (hasGroupFilter(ours) || !hasEvent(ours, 'message.received'))) {
+    await openwa.deleteWebhook(sessionId, hookId(ours));
+  }
+
+  try {
+    await openwa.registerWebhook(sessionId, url, config.openwa.webhookSecret);
+  } catch (err) {
+    console.warn('[OpenWA] webhook (re)registration failed:', err.message);
+    return { repaired: false, reason: 'register-failed', hook: ours, hooks };
+  }
+  return { repaired: true, reason: ours ? 'fixed' : 'created', hook: ours, hooks };
+}
+
 function normalizeChatId(v) {
   const s = String(v).trim();
   if (!s) return null;
@@ -129,19 +320,23 @@ webhookRouter.post('/openwa', async (req, res) => {
   // message: OpenWA was told "received" and never retried, while the new process
   // started with an empty count. Recording first means an acknowledged delivery
   // is on disk, and the unique event_key makes OpenWA's own retries idempotent
-  // even across restarts. Bounded so a slow database cannot stall the webhook —
-  // on timeout the work continues in the background and handleOpenwaEvent below
-  // records it anyway (the same event_key, so still counted once).
-  let pending = null;
+  // even across restarts. Bounded so a slow database cannot stall the webhook.
+  //
+  // The envelope matters: `ok: true` with a `null` value is itself an answer
+  // ("this delivery is not countable"), while no envelope at all means the step
+  // timed out or threw — hence the background handler re-runs it. Without that
+  // distinction, the mention gate ran twice per group message (extra gateway
+  // lookups) and the log claimed a phantom skip.
+  let preAck = null;
   try {
-    pending = await withTimeout(recordPendingInbound(payload), ACK_TIMEOUT_MS);
+    preAck = { ok: true, value: await withTimeout(recordPendingInbound(payload), ACK_TIMEOUT_MS) };
   } catch (err) {
     console.error('[OpenWA] Could not record the pending message before ack:', err.message);
   }
 
   res.status(200).json({ ok: true });
 
-  handleOpenwaEvent(payload, pending).catch((err) => {
+  handleOpenwaEvent(payload, preAck).catch((err) => {
     console.error('[OpenWA] Webhook processing error:', err.message);
   });
 });
@@ -155,8 +350,13 @@ webhookRouter.post('/openwa', async (req, res) => {
  * drop a prospect's message — Muse decides what to do with it, and the feed is the
  * only place she can learn about it.
  *
+ * Group messages pass the mention gate first: a message that does not @-mention
+ * this bot is not Muse's business in a busy team group, and it is never written —
+ * but the decision is logged to diagnostics, never silent.
+ *
  * @returns {Promise<object|null>} what was recorded, or null when this delivery is
- *   not Muse's business (history/lifecycle events, our own echoes, bot mode).
+ *   not Muse's business (history/lifecycle events, our own echoes, bot mode, or
+ *   group chatter without a mention of the bot).
  */
 async function recordPendingInbound(payload) {
   if (!payload || payload.event !== 'message.received') return null;
@@ -166,7 +366,36 @@ async function recordPendingInbound(payload) {
   const { bot, softOff } = await waMode.modeFor(sessionId);
   if (bot && !softOff) return null; // the backend answers this one itself
 
-  return waPending.markIncoming(sessionId, data, { idempotencyKey });
+  const chatId = normalizeChatId(data.chatId || data.from);
+  if (!chatId) return null;
+
+  const { ownDigits, ownName } = await ownNumberFor(sessionId);
+  const gate = await mentionGate({ sessionId, data, chatId, ownDigits, ownName });
+  if (!gate.counted) {
+    const author = normalizeWid(data.author || null);
+    diag.record({
+      kind: 'inbound',
+      action: 'skip',
+      reason: gate.reason,
+      sessionId,
+      chatId,
+      isGroup: true,
+      author: author || data.author || null,
+      profileName: data.senderName || data.pushName || null,
+    });
+    console.log('[OpenWA] Group message not counted for Muse (bot not mentioned)', {
+      sessionId,
+      chatId,
+      reason: gate.reason,
+    });
+    return null;
+  }
+
+  return waPending.markIncoming(sessionId, data, {
+    idempotencyKey,
+    mention: gate.mention,
+    facts: { isGroup: gate.isGroup, reason: gate.reason },
+  });
 }
 
 /** Bound a promise so the webhook ack can never hang on it. */
@@ -178,7 +407,7 @@ function withTimeout(promise, ms) {
   ]);
 }
 
-async function handleOpenwaEvent(payload, pending = null) {
+async function handleOpenwaEvent(payload, preAck = null) {
   const { event, sessionId, idempotencyKey } = (payload && typeof payload === 'object') ? payload : {};
   if (!event || !sessionId) return;
   if (event !== 'message.received') {
@@ -219,12 +448,40 @@ async function handleOpenwaEvent(payload, pending = null) {
     return;
   }
 
-  // Muse mode: the message is already counted (before this request was
-  // acknowledged — see recordPendingInbound), so stop here. Nothing below this
-  // point runs: the backend sends no reply and spends no tokens, and Muse reads
-  // the real messages from the OpenWA API and answers them herself.
+  // Muse mode: the message has been through the mention gate already (see
+  // recordPendingInbound, which runs before the acknowledge). `pending` is that
+  // decision; when the pre-ack step timed out or threw we get null and re-run it
+  // here — the same durable, idempotent write.
+  // Muse mode: the message has been through the mention gate already (see
+  // recordPendingInbound, which runs before the acknowledge). `preAck.value` is
+  // that decision; when the pre-ack step did not answer at all we re-run it here
+  // — the same durable, idempotent write.
   if (!botReplies) {
-    const counted = pending || await waPending.markIncoming(sessionId, data, { idempotencyKey });
+    const outcome = preAck && preAck.ok ? preAck.value : await recordPendingInbound(payload);
+    if (outcome && outcome.counted === false) {
+      console.log('[OpenWA] Group message not counted for Muse (bot not mentioned)', {
+        sessionId,
+        chatId: outcome.chatId || (data.chatId || data.from || null),
+        reason: outcome.reason,
+      });
+      return;
+    }
+    const counted = outcome;
+    if (!counted) {
+      // Neither the pre-ack recording nor its retry produced a count (a payload
+      // without a chat, or the mode flipped between the two): nothing reached the
+      // feed, so say so once instead of logging a phantom "counted" line.
+      diag.record({
+        kind: 'inbound',
+        action: 'skip',
+        reason: 'not-countable',
+        sessionId,
+        chatId: data.chatId || data.from || null,
+        isGroup: data.isGroup === true || String(data.chatId || data.from || '').endsWith('@g.us'),
+      });
+      console.log('[OpenWA] Inbound message not counted for Muse (nothing to record)', { sessionId });
+      return;
+    }
     diag.record({
       kind: 'inbound',
       action: 'pending',
@@ -485,6 +742,9 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
       autoReplySuspended: mode.autoReplySuspended,       // saved on, but the session is disconnected
       // false while migration_v13 has not been run: the toggle cannot be saved yet.
       migrationV13Applied: !!conn && Object.prototype.hasOwnProperty.call(conn, 'auto_reply_enabled'),
+      // true when a gateway hook is dropping group traffic before it reaches us —
+      // the UI offers a one-click repair for exactly this (V15).
+      webhookFiltered: await webhookFilterState(conn?.openwa_session_id || ''),
       pendingUrl: `${base}/wa-pending`,
     },
   });
@@ -505,11 +765,17 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   const webhookUrl = `${backendUrl.replace(/\/+$/, '')}/api/webhooks/openwa`;
 
-  // Best-effort webhook registration so the session forwards message.received events.
+  // Best-effort webhook (re)registration so the session forwards message.received
+  // events — checked first so a stale hook carrying a group-excluding filter is
+  // repaired instead of left dropping group messages (see ensureWebhook).
+  let webhook = null;
   try {
-    await openwa.registerWebhook(sessionId, webhookUrl, config.openwa.webhookSecret);
+    webhook = await ensureWebhook(sessionId, webhookUrl);
+    if (!webhook.repaired && webhook.reason !== 'already-clean') {
+      console.warn('[OpenWA] Webhook registration outcome:', webhook.reason);
+    }
   } catch (e) {
-    console.warn('[OpenWA] Webhook registration failed (session may already be wired):', e.message);
+    console.warn('[OpenWA] Webhook ensure failed (session may already be wired):', e.message);
   }
 
   const phoneNumber = typeof req.body?.phoneNumber === 'string' ? req.body.phoneNumber.trim() : '';
@@ -562,7 +828,27 @@ orgRouter.post('/connect', requireAuth, async (req, res) => {
   if (result.error) return res.status(500).json({ error: result.error.message });
   // New mapping and a fresh 'connected' status: drop any cached mode for it.
   waMode.invalidate(sessionId);
-  res.json({ ok: true, connection: result.data, webhookUrl });
+  res.json({ ok: true, connection: result.data, webhookUrl, webhook });
+});
+
+// POST /api/org/openwa/webhook/repair — re-point this org's session at this
+// backend with no excluding filters, so group messages are delivered too.
+// Safe to call any time: a correctly wired hook is returned untouched.
+orgRouter.post('/webhook/repair', requireAuth, async (req, res) => {
+  const { data: conn, error } = await supabaseAdmin
+    .from('whatsapp_connections')
+    .select('openwa_session_id')
+    .eq('organization_id', req.orgId)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  const sessionId = conn?.openwa_session_id || (typeof req.body?.sessionId === 'string' ? req.body.sessionId : '');
+  if (!sessionId) return res.status(400).json({ error: 'No OpenWA session connected' });
+
+  const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const webhookUrl = `${backendUrl.replace(/\/+$/, '')}/api/webhooks/openwa`;
+
+  const outcome = await ensureWebhook(sessionId, webhookUrl);
+  res.json({ ok: true, sessionId, webhookUrl, ...outcome });
 });
 
 // POST /api/org/openwa/settings — per-org WhatsApp behaviour:
@@ -712,10 +998,12 @@ orgRouter.post('/disconnect', requireAuth, async (req, res) => {
   res.json({ ok: true, ...(await waMode.statusFor(conn?.openwa_session_id || '')) });
 });
 
-// POST /api/org/openwa/reconnect — bring the org's session back. The gateway is
-// the source of truth for whether WhatsApp itself is linked; our row only records
-// the owner's switch. In particular a session that is *already started* is success,
-// not an error (previously it 502'd and the row stayed 'disconnected' forever).
+// POST /api/org/openwa/reconnect — the "make it work again" button. Reconciles
+// the session wiring as well as the session itself: the webhook is repaired
+// first (a stale hook with a group-excluding filter is exactly how group
+// @-mentions stopped arriving), then the session is started when needed. An
+// already-started session is success, not an error — the row flips back to
+// 'connected' and answering resumes either way.
 orgRouter.post('/reconnect', requireAuth, async (req, res) => {
   const { data: conn, error } = await supabaseAdmin
     .from('whatsapp_connections')
@@ -724,6 +1012,17 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!conn?.openwa_session_id) return res.status(400).json({ error: 'No OpenWA session connected' });
+
+  // The webhook can only be verified against the URL this backend is reachable
+  // at, which is known here — not in the generic helper.
+  const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+  const webhookUrl = `${backendUrl.replace(/\/+$/, '')}/api/webhooks/openwa`;
+  let webhook = { repaired: false, reason: 'skipped' };
+  try {
+    webhook = await ensureWebhook(conn.openwa_session_id, webhookUrl);
+  } catch (e) {
+    console.warn('[OpenWA] Webhook ensure on reconnect failed:', e.message);
+  }
 
   let result;
   try {
@@ -736,7 +1035,7 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
     .update({ status: 'connected', updated_at: new Date().toISOString() })
     .eq('organization_id', req.orgId);
   waMode.invalidate(conn.openwa_session_id);
-  res.json({ ok: true, result: result.detail, ...(await waMode.statusFor(conn.openwa_session_id)) });
+  res.json({ ok: true, result: result.detail, webhook, ...(await waMode.statusFor(conn.openwa_session_id)) });
 });
 
 /**
