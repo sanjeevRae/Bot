@@ -104,6 +104,28 @@ const FAQS = [
   },
 ];
 
+/* Hero video — Cloudinary delivery variants of one asset (info_ztaomq).
+   The original upload is 1920×1080 H.264 at ~3.8 Mbps / 7.19 MB for 15s —
+   far too heavy for a looping hero. These transforms are generated once by
+   Cloudinary and cached at its CDN:
+     - width capped at the container's real size (1280 desktop / 960 mobile)
+     - ac_none strips the (muted, never heard) AAC audio track
+     - q_auto:eco WebM/VP9 for Chromium/Firefox (~285 KB desktop, ~224 KB mobile)
+     - MP4/H.264 fallback for Safari (~701 KB desktop, ~358 KB mobile)
+   Module scope so the URLs are stable across renders — one <video>, one
+   request, no duplicate downloads. The poster is a 1280×720 frame grab
+   (~33 KB) shown while the video loads and if playback ever fails. */
+const HERO_VIDEO_POSTER =
+  'https://res.cloudinary.com/dngbvnleh/video/upload/so_0,q_auto,f_jpg,w_1280/v1795423280/info_ztaomq.jpg';
+const HERO_VIDEO_SOURCES = [
+  // Mobile first: an unrestricted desktop <source> would match phones too and
+  // be picked before the smaller mobile files are ever considered.
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_960/v1795423280/info_ztaomq.webm', type: 'video/webm', media: '(max-width: 767px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,ac_none,w_960/v1795423280/info_ztaomq.mp4', type: 'video/mp4', media: '(max-width: 767px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_1280/v1795423280/info_ztaomq.webm', type: 'video/webm', media: '(min-width: 768px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto,ac_none,w_1280/v1795423280/info_ztaomq.mp4', type: 'video/mp4', media: '(min-width: 768px)' },
+];
+
 /* Reusable section header. Centred by default; pass align="left" for a left-aligned block. */
 function SectionHeader({ eyebrow, title, text, dark = false, eyebrowClassName = '', align = 'center' }) {
   // An explicit colour wins over the dark-section default, so the two never fight
@@ -140,6 +162,10 @@ export default function Home() {
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   // Which FAQ row is expanded (index), or null when all are closed.
   const [openFaq, setOpenFaq] = useState(null);
+  // Hero video: ref for reduced-motion handling; the failed flag swaps the
+  // video for its poster image if every source fails to load.
+  const heroVideoRef = useRef(null);
+  const [heroVideoFailed, setHeroVideoFailed] = useState(false);
   // Measured x/width of each feature column, so the indicator can slide between them.
   const featureGridRef = useRef(null);
   const featureTrackRef = useRef(null);
@@ -172,6 +198,31 @@ export default function Home() {
       window.removeEventListener('resize', measure);
     };
   }, []);
+
+  /* Hero video vs. reduced motion: visitors who prefer reduced motion get
+     the still poster/first frame instead of the loop. Runs on mount and
+     whenever the preference changes while the page is open. */
+  useEffect(() => {
+    const video = heroVideoRef.current;
+    if (!video) return undefined;
+    video.muted = true; // property, not just the attribute — guarantees autoplay is allowed
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => {
+      if (mq.matches) {
+        video.pause();
+      } else if (video.paused && !heroVideoFailed) {
+        const p = video.play();
+        if (p) p.catch(() => {}); // a denied autoplay simply leaves the poster visible
+      }
+    };
+    apply();
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+    mq.addListener(apply); // older Safari
+    return () => mq.removeListener(apply);
+  }, [heroVideoFailed]);
 
   // No hover (or a hover leaving the grid) parks the indicator on the first card.
   const activeFeatureIndex = Math.max(0, FEATURES.findIndex((f) => f.title === activeFeature));
@@ -246,8 +297,41 @@ export default function Home() {
               lead generation, and automated bookings — while saving time.
             </p>    
 
-            {/* Gif div */}
-            <div id="hero-gif" className="mt-8 aspect-video w-full overflow-hidden rounded-xl bg-ink-900 transition-[width,transform] duration-300 ease-out" />
+            {/* Hero video — fills the same box the scroll effect expands by id;
+                the video is a plain h-full child, so it follows the width /
+                transform animation without taking part in the box's sizing. */}
+            <div id="hero-gif" className="mt-8 aspect-video w-full overflow-hidden rounded-xl bg-ink-900 transition-[width,transform] duration-300 ease-out">
+              {heroVideoFailed ? (
+                <img src={HERO_VIDEO_POSTER} alt="" aria-hidden="true" className="block h-full w-full object-cover" />
+              ) : (
+                <video
+                  ref={heroVideoRef}
+                  className="block h-full w-full object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster={HERO_VIDEO_POSTER}
+                  disablePictureInPicture
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onError={() => setHeroVideoFailed(true)}
+                >
+                  {HERO_VIDEO_SOURCES.map((s, i) => (
+                    <source
+                      key={s.src}
+                      src={s.src}
+                      type={s.type}
+                      media={s.media}
+                      // Only the last <source> reports an error once every
+                      // source has failed — that is the fallback trigger.
+                      onError={i === HERO_VIDEO_SOURCES.length - 1 ? () => setHeroVideoFailed(true) : undefined}
+                    />
+                  ))}
+                </video>
+              )}
+            </div>
           </div>
         </div>
       </section>
