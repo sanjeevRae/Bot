@@ -118,7 +118,7 @@ const config = {
   // Cloudflare Turnstile (bot protection — free, unlimited)
   turnstile: {
     secretKey: process.env.TURNSTILE_SECRET_KEY || '',
-    // When empty, verification is skipped (dev mode / not yet configured)
+    // Enforcement policy lives in middleware/turnstile.js: production fails closed when this is empty.
   },
 
   // Nepali payment gateways (V4) — eSewa & Khalti
