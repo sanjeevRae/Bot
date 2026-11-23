@@ -104,26 +104,28 @@ const FAQS = [
   },
 ];
 
-/* Hero video — Cloudinary delivery variants of one asset (info_ztaomq).
-   The original upload is 1920×1080 H.264 at ~3.8 Mbps / 7.19 MB for 15s —
-   far too heavy for a looping hero. These transforms are generated once by
-   Cloudinary and cached at its CDN:
+/* Hero video — Cloudinary delivery variants of one asset (info_i7b7ds).
+   The original upload is 1920×1080 H.264, 4.67 MB for 22.7s, and it carries
+   an AAC audio track — the hero is muted by design, so no delivered file
+   contains audio at all. These transforms are generated once by Cloudinary
+   and cached at its CDN:
      - width capped at the container's real size (1280 desktop / 960 mobile)
-     - ac_none strips the (muted, never heard) AAC audio track
-     - q_auto:eco WebM/VP9 for Chromium/Firefox (~285 KB desktop, ~224 KB mobile)
-     - MP4/H.264 fallback for Safari (~701 KB desktop, ~358 KB mobile)
+     - ac_none strips the audio track from every variant (verified: each
+       delivered file has a single video stream, no audio stream)
+     - q_auto:eco WebM/VP9 for Chromium/Firefox (~500 KB desktop, ~376 KB mobile)
+     - q_auto:eco MP4/H.264 fallback for Safari (~1.06 MB desktop, ~665 KB mobile)
    Module scope so the URLs are stable across renders — one <video>, one
    request, no duplicate downloads. The poster is a 1280×720 frame grab
-   (~33 KB) shown while the video loads and if playback ever fails. */
+   (~28 KB) shown while the video loads and if playback ever fails. */
 const HERO_VIDEO_POSTER =
-  'https://res.cloudinary.com/dngbvnleh/video/upload/so_0,q_auto,f_jpg,w_1280/v1795423280/info_ztaomq.jpg';
+  'https://res.cloudinary.com/dngbvnleh/video/upload/so_0,q_auto,f_jpg,w_1280/v1795425513/info_i7b7ds.jpg';
 const HERO_VIDEO_SOURCES = [
   // Mobile first: an unrestricted desktop <source> would match phones too and
   // be picked before the smaller mobile files are ever considered.
-  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_960/v1795423280/info_ztaomq.webm', type: 'video/webm', media: '(max-width: 767px)' },
-  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,ac_none,w_960/v1795423280/info_ztaomq.mp4', type: 'video/mp4', media: '(max-width: 767px)' },
-  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_1280/v1795423280/info_ztaomq.webm', type: 'video/webm', media: '(min-width: 768px)' },
-  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto,ac_none,w_1280/v1795423280/info_ztaomq.mp4', type: 'video/mp4', media: '(min-width: 768px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_960/v1795425513/info_i7b7ds.webm', type: 'video/webm', media: '(max-width: 767px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,ac_none,w_960/v1795425513/info_i7b7ds.mp4', type: 'video/mp4', media: '(max-width: 767px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,vc_auto,ac_none,w_1280/v1795425513/info_i7b7ds.webm', type: 'video/webm', media: '(min-width: 768px)' },
+  { src: 'https://res.cloudinary.com/dngbvnleh/video/upload/q_auto:eco,ac_none,w_1280/v1795425513/info_i7b7ds.mp4', type: 'video/mp4', media: '(min-width: 768px)' },
 ];
 
 /* Reusable section header. Centred by default; pass align="left" for a left-aligned block. */
