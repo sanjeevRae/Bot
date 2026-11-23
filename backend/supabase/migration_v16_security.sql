@@ -146,7 +146,7 @@ end $$;
 -- 4d. create_client_org is SECURITY DEFINER and creates organizations:
 --     restrict it to the service role. (The backend does not call it — the
 --     agency routes perform the inserts directly — so nothing breaks.)
-revoke execute on function public.create_client_org(text) from public;
+revoke execute on function public.create_client_org(text) from public, anon, authenticated;
 grant execute on function public.create_client_org(text) to service_role;
 
 -- ---------------------------------------------------------------------
