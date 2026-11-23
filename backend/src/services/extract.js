@@ -108,7 +108,7 @@ async function fromDocument(file) {
  */
 async function fromSpreadsheet(file) {
   const XLSX = require('xlsx');
-  const wb = XLSX.read(file.data, { type: 'buffer' });
+  const wb = XLSX.read(file.data, { type: 'buffer', sheetRows: 10000 });
   const parts = [];
 
   for (const sheetName of wb.SheetNames.slice(0, 20)) {
@@ -161,6 +161,77 @@ async function fromAudio(file) {
  * @param {{name:string, mimetype:string, size:number, data:Buffer}} file
  * @returns {Promise<{text:string, kind:string, sourceType:string, meta?:object}>}
  */
+
+// ---------------------------------------------------------------------------
+// File-signature verification (2026-11-23 hardening)
+//
+// detectKind trusts the filename extension / declared MIME, both of which an
+// uploader controls. Before any parser touches the bytes, verify the magic
+// number matches the claimed kind, so a renamed executable/archive can't be
+// smuggled into a parser that wasn't expecting it. Text kinds have no magic
+// number; they get a NUL-byte sanity check instead (binary content in the
+// first block is not text).
+// ---------------------------------------------------------------------------
+
+const ZIP_MAGIC = [0x50, 0x4b, 0x03, 0x04]; // PK\x03\x04 — docx/xlsx/pptx/ods
+const OLE_MAGIC = [0xd0, 0xcf, 0x11, 0xe0]; // legacy .doc/.xls/.ppt containers
+
+function startsWithBytes(buf, bytes, offset = 0) {
+  if (!buf || buf.length < offset + bytes.length) return false;
+  return bytes.every((b, i) => buf[offset + i] === b);
+}
+function asciiAt(buf, offset, str) {
+  if (!buf || buf.length < offset + str.length) return false;
+  for (let i = 0; i < str.length; i++) if (buf[offset + i] !== str.charCodeAt(i)) return false;
+  return true;
+}
+
+function signatureMatches(kind, buf) {
+  switch (kind) {
+    case 'pdf':
+      return asciiAt(buf, 0, '%PDF-');
+    case 'document':
+    case 'slides':
+      return startsWithBytes(buf, ZIP_MAGIC) || startsWithBytes(buf, OLE_MAGIC);
+    case 'sheet':
+      return (
+        startsWithBytes(buf, ZIP_MAGIC) ||
+        startsWithBytes(buf, OLE_MAGIC) ||
+        asciiAt(buf, 0, 'PK') ||
+        // .csv/.tsv renamed to .xls still parses as a sheet of text
+        !buf.subarray(0, 4096).includes(0)
+      );
+    case 'image':
+      return (
+        startsWithBytes(buf, [0x89, 0x50, 0x4e, 0x47]) || // PNG
+        startsWithBytes(buf, [0xff, 0xd8, 0xff]) || // JPEG
+        asciiAt(buf, 0, 'GIF8') || // GIF
+        asciiAt(buf, 0, 'BM') || // BMP
+        (asciiAt(buf, 0, 'RIFF') && asciiAt(buf, 8, 'WEBP')) || // WebP
+        startsWithBytes(buf, [0x49, 0x49, 0x2a, 0x00]) || // TIFF little-endian
+        startsWithBytes(buf, [0x4d, 0x4d, 0x00, 0x2a]) // TIFF big-endian
+      );
+    case 'audio':
+      return (
+        asciiAt(buf, 0, 'ID3') || // MP3 with tag
+        startsWithBytes(buf, [0xff, 0xfb]) || startsWithBytes(buf, [0xff, 0xf3]) || startsWithBytes(buf, [0xff, 0xf2]) || // MP3 frames
+        (asciiAt(buf, 0, 'RIFF') && asciiAt(buf, 8, 'WAVE')) || // WAV
+        asciiAt(buf, 0, 'OggS') || // OGG/Opus
+        asciiAt(buf, 0, 'fLaC') || // FLAC
+        asciiAt(buf, 4, 'ftyp') // MP4/M4A containers
+      );
+    case 'text': {
+      // No magic number for text: reject obvious binary (NUL in first block).
+      return !buf.subarray(0, 4096).includes(0);
+    }
+    default:
+      return false;
+  }
+}
+
+/** Cap on extracted text so a decompression bomb can't exhaust memory downstream. */
+const MAX_EXTRACTED_CHARS = parseInt(process.env.KB_MAX_EXTRACTED_CHARS || '500000', 10);
+
 async function extractFile(file) {
   if (!file || !file.data) throw badRequest('No file received.');
   if (file.size > MAX_FILE_BYTES) {
@@ -169,6 +240,10 @@ async function extractFile(file) {
 
   const kind = detectKind(file);
   if (!kind) throw badRequest(`Unsupported file type. Use ${ACCEPTED_FILE_TYPES}.`);
+
+  if (!signatureMatches(kind, file.data)) {
+    throw badRequest('That file’s contents do not match its type. Please upload a genuine file of the stated format.');
+  }
 
   let text = '';
   let meta;
@@ -195,6 +270,11 @@ async function extractFile(file) {
   }
 
   text = cleanText(decodeEntities(text));
+  if (text.length > MAX_EXTRACTED_CHARS) {
+    // Decompression-bomb guard: a small archive must not expand into an
+    // unbounded in-memory document.
+    text = text.slice(0, MAX_EXTRACTED_CHARS);
+  }
   if (text.length < 20) {
     throw badRequest(
       kind === 'image'
