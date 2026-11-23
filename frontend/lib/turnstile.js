@@ -32,6 +32,7 @@ function loadTurnstile() {
           widgetId = window.turnstile.render(holder, {
             sitekey: SITE_KEY,
             size: 'invisible',
+            execution: 'execute',
             callback: (token) => {
               if (pendingResolve) {
                 const r = pendingResolve;
@@ -59,16 +60,12 @@ function loadTurnstile() {
   return loadPromise;
 }
 
-/** Fresh Turnstile token, or '' when not configured / unavailable. */
-export async function getTurnstileToken() {
-  if (!SITE_KEY) return '';
-  const ok = await loadTurnstile();
-  if (!ok || widgetId === null || typeof window === 'undefined' || !window.turnstile) return '';
+function attemptToken() {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       pendingResolve = null;
       resolve('');
-    }, 5000);
+    }, 15000);
     pendingResolve = (token) => {
       clearTimeout(timer);
       resolve(token);
@@ -82,4 +79,14 @@ export async function getTurnstileToken() {
       resolve('');
     }
   });
+}
+
+/** Fresh Turnstile token, or '' when not configured / unavailable. */
+export async function getTurnstileToken() {
+  if (!SITE_KEY) return '';
+  const ok = await loadTurnstile();
+  if (!ok || widgetId === null || typeof window === 'undefined' || !window.turnstile) return '';
+  // One retry: a first challenge can fail or time out on a slow network,
+  // and a single failed challenge must not doom the whole conversation.
+  return (await attemptToken()) || attemptToken();
 }

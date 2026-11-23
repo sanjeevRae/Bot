@@ -145,7 +145,7 @@ router.get('/widget.js', async (req, res) => {
             var holder = document.createElement("div");
             holder.style.display = "none";
             document.body.appendChild(holder);
-            tsId = window.turnstile.render(holder, { sitekey: TS_KEY, size: "invisible",
+            tsId = window.turnstile.render(holder, { sitekey: TS_KEY, size: "invisible", execution: "execute",
               callback: function(tok){ window.__chitraTurnstileToken = tok; if (tsPending) { var p = tsPending; tsPending = null; p(tok); } },
               "error-callback": function(){ if (tsPending) { var p = tsPending; tsPending = null; p(""); } } });
           } catch(e) {}
@@ -155,14 +155,18 @@ router.get('/widget.js', async (req, res) => {
         document.head.appendChild(sc);
       });
     }
-    return tsLoad.then(function(){
-      if (!window.turnstile || tsId === null) return "";
+    function attempt(){
+      if (!window.turnstile || tsId === null) return Promise.resolve("");
       return new Promise(function(resolve){
-        var to = setTimeout(function(){ tsPending = null; resolve(""); }, 5000);
+        var to = setTimeout(function(){ tsPending = null; resolve(""); }, 15000);
         tsPending = function(tok){ clearTimeout(to); resolve(tok); };
         try { window.turnstile.reset(tsId); window.turnstile.execute(tsId); }
         catch(e) { clearTimeout(to); tsPending = null; resolve(""); }
       });
+    }
+    return tsLoad.then(function(){
+      // One retry: a failed/timed-out first challenge must not doom the chat.
+      return attempt().then(function(tok){ return tok || attempt(); });
     });
   }
   function ensureS(){
@@ -424,20 +428,21 @@ var sc=document.createElement("script");
 sc.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 sc.onload=function(){try{
 var holder=document.createElement("div");holder.style.display="none";document.body.appendChild(holder);
-tsId=window.turnstile.render(holder,{sitekey:TS_KEY,size:"invisible",
+tsId=window.turnstile.render(holder,{sitekey:TS_KEY,size:"invisible",execution:"execute",
 callback:function(tok){window.__chitraTurnstileToken=tok;if(tsPending){var p=tsPending;tsPending=null;p(tok);}},
 "error-callback":function(){if(tsPending){var p=tsPending;tsPending=null;p("");}}});
 }catch(e){}resolve();};
 sc.onerror=function(){resolve();};
 document.head.appendChild(sc);});}
-return tsLoad.then(function(){
-if(!window.turnstile||tsId===null)return "";
+function attempt(){
+if(!window.turnstile||tsId===null)return Promise.resolve("");
 return new Promise(function(resolve){
-var to=setTimeout(function(){tsPending=null;resolve("");},5000);
+var to=setTimeout(function(){tsPending=null;resolve("");},15000);
 tsPending=function(tok){clearTimeout(to);resolve(tok);};
 try{window.turnstile.reset(tsId);window.turnstile.execute(tsId);}
 catch(e){clearTimeout(to);tsPending=null;resolve("");}
-});});
+});}
+return tsLoad.then(function(){return attempt().then(function(tok){return tok||attempt();});});
 }
 function ensureS(){if(sess)return Promise.resolve(sess);
 return tsToken().then(function(tok){
