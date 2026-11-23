@@ -357,7 +357,8 @@ async function testsUpload() {
   assert.strictEqual(detectKind({ name: 'note.mp3', mimetype: '' }), 'audio');
   assert.strictEqual(detectKind({ name: 'readme', mimetype: 'text/plain' }), 'text');
   await assert.rejects(() => extractFile({ name: 'big.bin', mimetype: '', size: 6 * 1024 * 1024, data: Buffer.alloc(8) }), /File too large/);
-  await assert.rejects(() => extractFile({ name: 'menu.png', mimetype: 'image/jpeg', size: 10, data: Buffer.alloc(10) }), /OCR is not configured/);
+  // Real PNG magic bytes: the file-signature check (2026-11-23 hardening) runs before OCR, so the fixture must be a genuine image header to reach the OCR stage.
+  await assert.rejects(() => extractFile({ name: 'menu.png', mimetype: 'image/jpeg', size: 12, data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]) }), /OCR is not configured/);
   console.log('ok  detectKind/extractFile route formats and enforce the size + config guards');
 }
 

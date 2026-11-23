@@ -20,6 +20,7 @@ process.env.OPENWA_WEBHOOK_SECRET = 'test-secret-0123456789';
 process.env.OPENWA_BASE_URL = 'http://openwa.test';    // mocked gateway (see the fetch stub)
 process.env.OPENWA_API_KEY = 'test-key';
 process.env.WA_SESSION_WAIT_MS = '0';                  // status poll never waits
+process.env.WA_PENDING_TOKEN = 'unit-test-feed-token';  // feed is authenticated since the 2026-11-23 hardening
 
 const path = require('path');
 const crypto = require('crypto');
@@ -302,7 +303,7 @@ function sign(body) {
 const server = app.listen(0, async () => {
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  const pending = async () => (await fetch(`${base}/wa-pending`)).json();
+  const pending = async () => (await fetch(`${base}/wa-pending`, { headers: { 'x-wa-token': 'unit-test-feed-token' } })).json();
 
   /** POST a signed OpenWA delivery exactly like the gateway does. */
   async function deliver(payload, { signed = true } = {}) {
@@ -363,7 +364,7 @@ const server = app.listen(0, async () => {
     check('the feed carries counts and chat ids only — never message text',
       !JSON.stringify(zero).includes('hello') && !('messages' in zero) && !('body' in zero));
     check('the feed is also served under /api/wa-pending',
-      (await fetch(`${base}/api/wa-pending`)).ok);
+      (await fetch(`${base}/api/wa-pending`, { headers: { 'x-wa-token': 'unit-test-feed-token' } })).ok);
 
     // ==================== 2. signature is enforced ====================
     const unsigned = await deliver(incoming(CHAT_A), { signed: false });
@@ -456,7 +457,7 @@ const server = app.listen(0, async () => {
 
     // ==================== 7. readiness never blocks the feed ====================
     const t0 = Date.now();
-    await fetch(`${base}/wa-pending`);
+    await fetch(`${base}/wa-pending`, { headers: { 'x-wa-token': 'unit-test-feed-token' } });
     const elapsed = Date.now() - t0;
     check('the feed stays fast (one in-memory read, no gateway call on the hot path)',
       elapsed < 250, `${elapsed}ms`);
