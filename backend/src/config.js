@@ -30,7 +30,7 @@ const config = {
   // V2 messaging channels (Meta Cloud APIs)
   meta: {
     apiVersion: process.env.META_GRAPH_VERSION || 'v20.0',
-    verifyToken: process.env.META_VERIFY_TOKEN || 'chitra-verify',
+    verifyToken: process.env.META_VERIFY_TOKEN || '', // no hardcoded fallback: empty = handshake fails closed
   },
   whatsapp: {
     // WhatsApp Cloud API — one business phone number per deployment
@@ -73,16 +73,26 @@ const config = {
   // Chat session isolation — HMAC secret binding visitor sessions to their org.
   // Sessions are issued by POST /api/chat/session and verified on every message,
   // so a visitor can never read or continue another visitor's conversation.
-  // Set SESSION_SECRET in production (>= 32 random chars). Fallbacks keep the
-  // app running: the OpenWA webhook secret, then a stable hash of the Supabase
-  // service key, then an ephemeral per-boot secret (sessions reset on restart).
+  // SESSION_SECRET is a DEDICATED secret: it must not be shared with OpenWA or
+  // any other provider secret, and it must be stable across restarts (rotating
+  // it invalidates all live visitor sessions). In production it is REQUIRED —
+  // the server refuses to boot without it rather than silently falling back to
+  // a borrowed or per-boot-random secret (the pre-hardening behaviour, removed
+  // 2026-11-23: fallbacks made session validity depend on unrelated secrets
+  // and made every restart a silent session wipe).
   session: {
-    secret:
-      process.env.SESSION_SECRET ||
-      process.env.OPENWA_WEBHOOK_SECRET ||
-      (process.env.SUPABASE_SERVICE_KEY
-        ? require('crypto').createHash('sha256').update(process.env.SUPABASE_SERVICE_KEY).digest('hex')
-        : require('crypto').randomBytes(32).toString('hex')),
+    secret: (() => {
+      const s = process.env.SESSION_SECRET || '';
+      if (s) return s;
+      if ((process.env.NODE_ENV || 'development') === 'production') {
+        throw new Error(
+          'SESSION_SECRET is required in production. Set a dedicated random secret ' +
+          '(>= 32 chars) in the environment — do not reuse any other provider secret.'
+        );
+      }
+      console.warn('[config] SESSION_SECRET not set — using an ephemeral per-boot secret (dev only). Visitor sessions will reset on restart.');
+      return require('crypto').randomBytes(32).toString('hex');
+    })(),
   },
 
   // Email notifications — Brevo preferred (same provider as Supabase auth
