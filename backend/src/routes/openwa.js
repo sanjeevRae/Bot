@@ -841,7 +841,7 @@ orgRouter.post('/webhook/repair', requireAuth, async (req, res) => {
     .eq('organization_id', req.orgId)
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
-  const sessionId = conn?.openwa_session_id || (typeof req.body?.sessionId === 'string' ? req.body.sessionId : '');
+  const sessionId = conn?.openwa_session_id || ''; // own connection only — a sessionId from the request body is never honoured (2026-11-23)
   if (!sessionId) return res.status(400).json({ error: 'No OpenWA session connected' });
 
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
@@ -1082,7 +1082,7 @@ orgRouter.post('/test', requireAuth, async (req, res) => {
     .eq('organization_id', req.orgId)
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
-  const sessionId = conn?.openwa_session_id || (typeof req.body?.sessionId === 'string' ? req.body.sessionId : '');
+  const sessionId = conn?.openwa_session_id || ''; // own connection only — a sessionId from the request body is never honoured (2026-11-23)
   if (!sessionId) return res.status(400).json({ error: 'No OpenWA session connected' });
 
   try {

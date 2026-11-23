@@ -244,9 +244,15 @@ async function inviteClientUser(email, clientOrg) {
        <p style="font-size:12px;color:#6b7280">Or paste this link into your browser:<br>${actionLink}</p>`
     )
   );
+  if (!sent) {
+    // The magic link is a live credential for the invitee's account: it is
+    // delivered ONLY inside the email (2026-11-23 — it was previously
+    // returned to the inviter when email failed, an account-takeover vector).
+    console.warn('[agency] invite email could not be sent; sign-in link withheld (check BREVO_API_KEY / RESEND_API_KEY)');
+  }
   return sent
     ? { sent: true, mode: 'magiclink' }
-    : { sent: false, mode: 'manual', link: actionLink };
+    : { sent: false, mode: 'manual' };
 }
 
 module.exports = router;

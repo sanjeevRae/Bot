@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireOwner } = require('../middleware/auth');
 const { messageQuotaFor } = require('../services/quotas');
 const { invalidateOrgContext } = require('../services/orgCache');
 const prefs = require('../services/channelPrefs');
@@ -70,7 +70,7 @@ router.get('/me', requireAuth, async (req, res) => {
 });
 
 /** PATCH /api/org/settings — update bot settings */
-router.patch('/settings', requireAuth, async (req, res) => {
+router.patch('/settings', requireAuth, requireOwner, async (req, res) => {
   const allowed = ['bot_name', 'welcome_message', 'brand_color', 'notify_email', 'whatsapp_number', 'webhook_url', 'timezone'];
   const updates = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
@@ -131,7 +131,7 @@ router.get('/channels', requireAuth, async (req, res) => {
 });
 
 /** POST /api/org/channels — connect a messaging channel */
-router.post('/channels', requireAuth, async (req, res) => {
+router.post('/channels', requireAuth, requireOwner, async (req, res) => {
   const { channel, externalId } = req.body;
 
   // Legacy Meta channels — flat columns on settings
@@ -178,7 +178,7 @@ router.post('/channels', requireAuth, async (req, res) => {
 });
 
 /** DELETE /api/org/channels/:channel — disconnect a channel */
-router.delete('/channels/:channel', requireAuth, async (req, res) => {
+router.delete('/channels/:channel', requireAuth, requireOwner, async (req, res) => {
   const metaValid = { whatsapp: 'whatsapp_phone_number_id', messenger: 'messenger_page_id' };
   const col = metaValid[req.params.channel];
 
@@ -256,7 +256,7 @@ router.get('/channel-prefs', requireAuth, async (req, res) => {
  * channel_settings. Sections: enabled, office, handoff, whatsappTemplate.
  * Sanitised so no bot token can ever be written through this endpoint.
  */
-router.patch('/channel-prefs', requireAuth, async (req, res) => {
+router.patch('/channel-prefs', requireAuth, requireOwner, async (req, res) => {
   try {
     const body = req.body || {};
     const { data: current } = await supabaseAdmin
@@ -335,7 +335,7 @@ router.patch('/channel-prefs', requireAuth, async (req, res) => {
   }
 });
 /** PATCH /api/org/profile — update org profile */
-router.patch('/profile', requireAuth, async (req, res) => {
+router.patch('/profile', requireAuth, requireOwner, async (req, res) => {
   const allowed = ['name', 'industry', 'timezone'];
   const updates = {};
   for (const k of allowed) if (k in req.body) updates[k] = req.body[k];
@@ -353,7 +353,7 @@ router.patch('/profile', requireAuth, async (req, res) => {
 });
 
 /** POST /api/org/api-key — generate widget API key */
-router.post('/api-key', requireAuth, async (req, res) => {
+router.post('/api-key', requireAuth, requireOwner, async (req, res) => {
   const rawKey = 'chitra_' + crypto.randomBytes(24).toString('hex');
   const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 

@@ -52,7 +52,13 @@ webhookRouter.post('/telegram/:token', async (req, res) => {
 
     const secret = String((match.settings?.telegram_webhook_secret) || '');
     const header = String(req.headers['x-telegram-bot-api-secret-token'] || '');
-    if (secret && header !== secret) {
+    const secretOk = (() => {
+      if (!secret) return true; // legacy org registered before secrets existed
+      const a = Buffer.from(header);
+      const b = Buffer.from(secret);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    })();
+    if (!secretOk) {
       console.warn('[telegram] secret mismatch — ignoring delivery');
       return;
     }

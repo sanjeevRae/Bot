@@ -109,4 +109,20 @@ async function applyOrgOverride(req) {
   }
 }
 
-module.exports = { requireAuth };
+
+/**
+ * Owner-level gate for organization-mutating operations (settings, profile,
+ * channel connections, API keys). Org members keep read + day-to-day
+ * operational access, but only the owner (or a platform admin) may change
+ * how the organization itself is configured. Added 2026-11-23: previously
+ * any member could change bot settings, connect channels or mint API keys.
+ * Must run after requireAuth.
+ */
+function requireOwner(req, res, next) {
+  if (req.profile?.is_platform_admin) return next();
+  const role = req.profile?.role;
+  if (role === 'owner' || role === 'admin') return next();
+  return res.status(403).json({ error: 'Only the organization owner can change these settings.' });
+}
+
+module.exports = { requireAuth, requireOwner };
