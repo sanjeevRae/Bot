@@ -79,7 +79,7 @@ async function requireAuth(req, res, next) {
     authCache.set(token, { at: Date.now(), user: req.user, orgId: req.orgId, role: req.role });
     pruneAuthCache();
 
-    applyOrgOverride(req);
+    await applyOrgOverride(req);
     next();
   } catch (err) {
     console.error('Auth middleware error:', err.message);
@@ -119,9 +119,9 @@ async function applyOrgOverride(req) {
  * Must run after requireAuth.
  */
 function requireOwner(req, res, next) {
-  if (req.profile?.is_platform_admin) return next();
-  const role = req.profile?.role;
-  if (role === 'owner' || role === 'admin') return next();
+  // requireAuth attaches the caller's role as req.role ('owner' | 'member' |
+  // 'admin' — platform admins carry role 'admin').
+  if (req.role === 'owner' || req.role === 'admin') return next();
   return res.status(403).json({ error: 'Only the organization owner can change these settings.' });
 }
 
