@@ -1,5 +1,6 @@
 const { ingestDocument } = require('./rag');
 const { extractTextFromHtml } = require('./ingest');
+const { fetchPublic, assertPublicUrl } = require('../lib/urlGuard');
 
 /**
  * V2 knowledge imports: Google Drive & Notion.
@@ -16,8 +17,11 @@ async function importGoogleDrive({ organizationId, url, title }) {
   const fileId = extractDriveFileId(url);
   if (!fileId) throw Object.assign(new Error('Could not parse a Google Drive file ID from that URL'), { status: 400 });
 
-  const res = await fetch(`https://drive.google.com/uc?export=download&id=${fileId}`, {
-    signal: AbortSignal.timeout(20000),
+  // Host is a fixed Google template (the user controls only the file id);
+  // fetchPublic still re-validates every redirect hop (Drive downloads
+  // redirect to googleusercontent.com).
+  const res = await fetchPublic(`https://drive.google.com/uc?export=download&id=${fileId}`, {
+    timeoutMs: 20000,
   });
   if (!res.ok) {
     throw Object.assign(
@@ -59,13 +63,27 @@ async function importGoogleDrive({ organizationId, url, title }) {
 }
 
 async function importNotion({ organizationId, url, title }) {
-  if (!/notion\.(so|site)/.test(url)) {
+  // Exact hostname check (2026-11-23 hardening): the old substring regex over
+  // the whole URL let any URL merely *containing* "notion.so" through —
+  // including loopback/private addresses, which were then fetched (SSRF).
+  let parsed;
+  try {
+    parsed = new URL(String(url));
+  } catch {
     throw Object.assign(new Error('Please paste a Notion page URL'), { status: 400 });
   }
+  const host = parsed.hostname.toLowerCase();
+  const isNotionHost =
+    host === 'notion.so' || host.endsWith('.notion.so') ||
+    host === 'notion.site' || host.endsWith('.notion.site');
+  if (!isNotionHost) {
+    throw Object.assign(new Error('Please paste a Notion page URL'), { status: 400 });
+  }
+  await assertPublicUrl(parsed.href);
 
-  const res = await fetch(url, {
+  const res = await fetchPublic(parsed.href, {
     headers: { 'User-Agent': 'ChitraAI-Bot/1.0 (+https://chitra.ai)' },
-    signal: AbortSignal.timeout(15000),
+    timeoutMs: 15000,
   });
   if (!res.ok) {
     throw Object.assign(

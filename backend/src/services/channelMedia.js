@@ -1,4 +1,5 @@
 const { transcribeAudio, isTranscriptionEnabled } = require('./transcribe');
+const { fetchPublic } = require('../lib/urlGuard');
 const { ocrImage } = require('./ocr');
 
 /**
@@ -40,9 +41,12 @@ const MEDIA_OCR_TIMEOUT_MS = parseInt(process.env.CHANNEL_MEDIA_OCR_TIMEOUT_MS |
 async function fetchMedia(url, maxBytes, headers = {}) {
   if (!url) return null;
   try {
-    const res = await fetch(url, {
+    // SSRF guard (2026-11-23): media URLs are sender-influenced; fetchPublic
+    // rejects private/loopback/link-local targets and re-validates redirects.
+    // A blocked URL throws, which the catch below turns into null as before.
+    const res = await fetchPublic(url, {
       headers,
-      signal: AbortSignal.timeout(MEDIA_FETCH_TIMEOUT_MS),
+      timeoutMs: MEDIA_FETCH_TIMEOUT_MS,
     });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());

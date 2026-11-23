@@ -72,6 +72,7 @@ function chunkByParagraphs(text, chunkSize = config.rag.chunkSize) {
  * content region when the page has one.
  */
 const cheerio = require('cheerio');
+const { fetchPublic } = require('../lib/urlGuard');
 
 function extractTextFromHtml(html) {
   const $ = cheerio.load(html);
@@ -150,9 +151,9 @@ function extractTextFromJsBundle(js) {
  *    bundle(s) and extract readable copy from them.
  */
 async function crawlUrl(url) {
-  const res = await fetch(url, {
+  const res = await fetchPublic(url, {
     headers: { 'User-Agent': 'ChitraAI-Bot/1.0 (+https://chitra.ai)' },
-    signal: AbortSignal.timeout(15000),
+    timeoutMs: 15000,
   });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   const html = await res.text();
@@ -169,7 +170,7 @@ async function crawlUrl(url) {
     const origin = new URL(url).origin;
     for (const path of bundlePaths) {
       try {
-        const bRes = await fetch(origin + path, { signal: AbortSignal.timeout(15000) });
+        const bRes = await fetchPublic(origin + path, { timeoutMs: 15000 });
         if (!bRes.ok) continue;
         const js = await bRes.text();
         const bundleText = extractTextFromJsBundle(js);
@@ -395,9 +396,9 @@ function extractLinksFrom$($, baseUrl) {
  * structured JSON-LD data and title/meta. Returns { text, links }.
  */
 async function fetchPageText(url) {
-  const res = await fetch(url, {
+  const res = await fetchPublic(url, {
     headers: { 'User-Agent': 'ChitraAI-Bot/1.0 (+https://chitra.ai)' },
-    signal: AbortSignal.timeout(15000),
+    timeoutMs: 15000,
   });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
   // Memory guardrail: skip giant pages (their DOM tree would spike memory).
@@ -432,7 +433,7 @@ async function fetchPageText(url) {
     const origin = new URL(url).origin;
     for (const path of bundlePaths) {
       try {
-        const bRes = await fetch(origin + path, { signal: AbortSignal.timeout(15000) });
+        const bRes = await fetchPublic(origin + path, { timeoutMs: 15000 });
         if (!bRes.ok) continue;
         const js = await bRes.text();
         const bundleText = extractTextFromJsBundle(js);
@@ -447,6 +448,9 @@ async function fetchPageText(url) {
     if (text.length < 200 && _jinaUsed < JINA_BUDGET) {
       _jinaUsed++;
       try {
+        // `url` here has already passed the SSRF guard (fetchPublic at the top
+        // of this function), so handing it to the Jina rendering proxy cannot
+        // be used to reach internal addresses through it.
         const jRes = await fetch('https://r.jina.ai/' + url, { signal: AbortSignal.timeout(30000) });
         if (jRes.ok) {
           const jText = await jRes.text();
@@ -491,7 +495,7 @@ async function collectSitemapUrls(origin) {
 
   // Sitemaps are sometimes gzipped (.xml.gz) — fetch + inflate transparently.
   const fetchSitemap = async (url) => {
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await fetchPublic(url, { timeoutMs: 10000 });
     if (!res.ok) throw new Error(String(res.status));
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf[0] === 0x1f && buf[1] === 0x8b) return zlib.gunzipSync(buf).toString('utf8');

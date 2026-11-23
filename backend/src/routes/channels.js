@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const config = require('../config');
+const { fetchPublic } = require('../lib/urlGuard');
 
 const router = express.Router();
 
@@ -114,9 +115,9 @@ async function fetchMetaMedia(mediaId, token) {
       { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10000) }
     ).then((r) => (r.ok ? r.json() : null));
     if (!meta?.url) return null;
-    const res = await fetch(meta.url, {
+    const res = await fetchPublic(meta.url, {
       headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(20000),
+      timeoutMs: 20000,
     });
     if (!res.ok) return null;
     return Buffer.from(await res.arrayBuffer());
