@@ -3,6 +3,16 @@ const path = require('path');
 const supabaseAdmin = require('../lib/supabase');
 
 const router = express.Router();
+/** Escape merchant-controlled text for HTML contexts (title/heading). */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 
 /**
  * Resolve an org from a custom domain (Host header).
@@ -90,12 +100,15 @@ router.get('/widget.js', async (req, res) => {
   var panel = document.createElement('div');
   panel.id = 'chitra-panel';
   panel.innerHTML =
-    '<div class="chitra-header"><span>'+BOT_NAME+'</span><button id="chitra-close" type="button" aria-label="Close chat">&times;</button></div>' +
+    '<div class="chitra-header"><span id="chitra-bot-name"></span><button id="chitra-close" type="button" aria-label="Close chat">&times;</button></div>' +
     '<div id="chitra-msgs"></div>' +
     '<form id="chitra-form"><input id="chitra-input" placeholder="Type a message..." autocomplete="off"/>' +
     '<button id="chitra-send" type="submit">Send</button></form>' +
     ${showBranding ? "'<div style=\\\"padding:6px;text-align:center;font-size:10px;color:#9ca3af;background:#fff\\\">Powered by <a href=\\\"https://chitratech.com.np\\\" target=\\\"_blank\\\" style=\\\"color:inherit;font-weight:600\\\">Chitra AI</a></div>'" : "''"};
   document.body.appendChild(panel);
+  // Bot name is merchant-controlled text: assign via textContent so a name
+  // like "<img onerror=...>" can never become markup on the host site (XSS).
+  panel.querySelector('#chitra-bot-name').textContent = BOT_NAME;
 
   var launcher = document.createElement('button');
   launcher.id = 'chitra-launcher';
@@ -337,7 +350,7 @@ router.get(['/bot/:orgId', '/'], async (req, res) => {
   const backendUrl = process.env.PUBLIC_BACKEND_URL || `${req.protocol}://${req.get('host')}`;
   res.type('html').send(`<!DOCTYPE html>
 <html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content"/>
-<title>Chat — ${org.name}</title>
+<title>Chat — ${escapeHtml(org.name)}</title>
 <style>
 html,body{height:100%}
 body{margin:0;font-family:system-ui,sans-serif;background:#f3f4f6;display:flex;justify-content:center;overflow:hidden}
@@ -352,7 +365,7 @@ input{flex:1;min-width:0;border:none;padding:16px;font-size:16px;outline:none}
 button{border:none;background:${brandColor};color:#fff;padding:0 22px;font-size:15px;font-weight:600;cursor:pointer}
 h1{font-size:17px;text-align:center;padding:14px;margin:0;color:#111;border-bottom:1px solid #eee}
 </style></head><body><div id="chat">
-<h1>💬 ${org.name}</h1><div id="msgs"></div>
+<h1>💬 ${escapeHtml(org.name)}</h1><div id="msgs"></div>
 <form><input id="in" placeholder="Type a message..." autocomplete="off" enterkeyhint="send"/><button>Send</button></form></div>
 <script>
 var msgs=document.getElementById("msgs");
