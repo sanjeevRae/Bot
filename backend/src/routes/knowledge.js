@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const {
@@ -85,7 +86,7 @@ router.get('/', async (req, res) => {
           migrationPending: true,
         });
       }
-      return res.status(500).json({ error: error.message });
+      return res.status(500).json({ error: publicError(error) });
     }
 
     const documents = (data || []).map((d) => ({ ...d, chunks: counts.get(d.id) || 0 }));
@@ -98,7 +99,7 @@ router.get('/', async (req, res) => {
       audioEnabled: isTranscriptionEnabled(),
     });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -114,7 +115,7 @@ router.get('/stats', async (req, res) => {
         .eq('organization_id', req.orgId),
     ]);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     res.json({
       documents: { used: count || 0, limit },
@@ -123,7 +124,7 @@ router.get('/stats', async (req, res) => {
       acceptedFileTypes: ACCEPTED_FILE_TYPES,
     });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -168,7 +169,7 @@ router.post('/search', async (req, res) => {
       })),
     });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -207,11 +208,11 @@ router.get('/sections/:id', async (req, res) => {
       .order('id', { ascending: true })
       .limit(20);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     res.json({ document, total: count || 0, shown: (sections || []).length, sections: sections || [] });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -237,7 +238,7 @@ router.patch('/:id', async (req, res) => {
         error: 'Pausing sources needs backend/supabase/migration_v10_knowledge.sql to be run in Supabase first.',
       });
     }
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -278,7 +279,7 @@ router.post('/crawl', async (req, res) => {
     });
     res.json({ ok: true, ...result, pagesCrawled: pages.length, pages });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -303,7 +304,7 @@ router.post('/text', async (req, res) => {
     });
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -351,7 +352,7 @@ router.post('/upload', async (req, res) => {
 
     res.json({ ok: true, results, added: results.length - failed.length, failed: failed.length });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -381,7 +382,7 @@ router.post('/structured', async (req, res) => {
 
     res.json({ ok: true, ...result, sections });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -403,7 +404,7 @@ router.post('/refresh', async (req, res) => {
       .eq('organization_id', req.orgId)
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     if (!doc) return res.status(404).json({ error: 'Document not found' });
     if (doc.source_type !== 'crawl' || !doc.url) {
       return res.status(400).json({ error: 'Only website sources can be re-synced. Delete and re-add other sources.' });
@@ -425,7 +426,7 @@ router.post('/refresh', async (req, res) => {
 
     res.json({ ok: true, ...result, pagesCrawled: pages.length });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -454,7 +455,7 @@ router.post('/youtube', async (req, res) => {
       autoCaptions: video.auto,
     });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -466,7 +467,7 @@ router.post('/drive', async (req, res) => {
     const result = await importGoogleDrive({ organizationId: req.orgId, url, title });
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -478,7 +479,7 @@ router.post('/notion', async (req, res) => {
     const result = await importNotion({ organizationId: req.orgId, url, title });
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -488,7 +489,7 @@ router.delete('/:id', async (req, res) => {
     await deleteDocument(req.orgId, parseInt(req.params.id, 10));
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 

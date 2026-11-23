@@ -84,6 +84,14 @@ app.use('/bot', helmetPublic);
 app.use('/api/channels/webhook', publicCors);
 app.use(strictCors); // strict allowlist for everything else
 
+// Request ids: every request gets an id, echoed in the X-Request-Id header
+// and included in error responses so a user report can be matched to logs.
+app.use((req, res, next) => {
+  req.id = require('crypto').randomUUID();
+  res.set('X-Request-Id', req.id);
+  next();
+});
+
 // ---------- Routes ----------
 app.get('/health', (req, res) => res.json({ ok: true, service: 'chitra-ai-backend', time: new Date().toISOString() }));
 
@@ -131,8 +139,8 @@ app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error(`Unhandled error [${req.id}]:`, err);
+  res.status(500).json({ error: 'Internal server error', requestId: req.id });
 });
 
 app.listen(config.port, () => {

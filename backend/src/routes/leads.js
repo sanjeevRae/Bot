@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(200);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ leads: data || [] });
 });
 
@@ -26,7 +27,7 @@ router.delete('/:id', async (req, res) => {
     .eq('id', parseInt(req.params.id, 10))
     .eq('organization_id', req.orgId);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ ok: true });
 });
 

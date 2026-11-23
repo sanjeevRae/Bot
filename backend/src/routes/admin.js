@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { sendEmail } = require('../services/email');
@@ -40,7 +41,7 @@ router.get('/tenants', async (req, res) => {
       .order('created_at', { ascending: false }));
   }
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const tenants = await Promise.all(
     (orgs || []).map(async (org) => {
@@ -101,7 +102,7 @@ router.patch('/tenants/:id/quota', async (req, res) => {
         error: 'Quota column missing. Run backend/supabase/migration_admin.sql in the Supabase SQL Editor first.',
       });
     }
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: publicError(error) });
   }
   res.json({ tenant: data });
 });
@@ -121,7 +122,7 @@ router.get('/agency-clients', async (req, res) => {
     .not('parent_org_id', 'is', null)
     .order('created_at', { ascending: false });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const enriched = await Promise.all(
     (clients || []).map(async (c) => {
@@ -163,7 +164,7 @@ router.post('/tenants/:id/grant-agency', async (req, res) => {
     .select('id, name, plan, plan_expires_at')
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ tenant: data });
 });
 
@@ -179,7 +180,7 @@ router.post('/tenants/:id/revoke-agency', async (req, res) => {
     .select('id, name, plan, plan_expires_at')
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ tenant: data });
 });
 
@@ -202,7 +203,7 @@ router.get('/export', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(10000);
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     const rows = [['timestamp', 'event_type', 'tokens', 'org_id', 'org_name']];
     (data || []).forEach((e) =>
@@ -226,7 +227,7 @@ router.get('/export', async (req, res) => {
       .from('organizations')
       .select('id, name, industry, created_at'));
   }
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const rows = [['name', 'industry', 'owner_email', 'signup_date', 'monthly_quota', 'messages_this_month']];
   for (const org of orgs || []) {
@@ -360,7 +361,7 @@ router.get('/orders', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(500));
   }
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   const orders = (data || []).map((row) => ({
     id: row.id,
     orderId: row.order_id,
@@ -420,7 +421,7 @@ router.patch('/orders/:id', async (req, res) => {
 router.post('/orders/:id/activate', async (req, res) => {
   const { data: order, error } = await supabaseAdmin
     .from('plan_requests').select('*').eq('id', req.params.id).maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
   const expires = new Date();
@@ -449,7 +450,7 @@ router.patch('/billing-profile', async (req, res) => {
   if (!Object.keys(cols).length) return res.status(400).json({ error: 'Nothing to update' });
   const { error } = await supabaseAdmin
     .from('billing_profile').upsert({ id: 1, ...cols }, { onConflict: 'id' });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ company: await loadCompany() });
 });
 
@@ -476,7 +477,7 @@ router.get('/invoices', async (req, res) => {
     .select('id, invoice_no, status, total, customer, organization_id, plan_request_id, sent_at, created_at, organizations(name)')
     .order('created_at', { ascending: false })
     .limit(500);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({
     invoices: (data || []).map((r) => ({
       id: r.id, invoiceNo: r.invoice_no, status: r.status, total: r.total,
@@ -491,7 +492,7 @@ router.get('/invoices', async (req, res) => {
 /** GET /api/admin/invoices/:id - full editable invoice. */
 router.get('/invoices/:id', async (req, res) => {
   const { data, error } = await supabaseAdmin.from('invoices').select('*').eq('id', req.params.id).maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   if (!data) return res.status(404).json({ error: 'Invoice not found' });
   res.json({ invoice: toInvoice(data, await loadCompany()) });
 });
@@ -581,7 +582,7 @@ router.post('/invoices', async (req, res) => {
   };
 
   const { data, error } = await supabaseAdmin.from('invoices').insert(row).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.status(201).json({ invoice: toInvoice(data, company) });
 });
 
@@ -609,7 +610,7 @@ router.patch('/invoices/:id', async (req, res) => {
   if (b.totalInWords === undefined) cols.total_in_words = amountInWords(totals.total);
 
   const { data, error } = await supabaseAdmin.from('invoices').update(cols).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   // Marking an invoice paid also closes the order it was raised for.
   if (cols.status === 'paid' && data.plan_request_id) {
@@ -622,7 +623,7 @@ router.patch('/invoices/:id', async (req, res) => {
 /** DELETE /api/admin/invoices/:id */
 router.delete('/invoices/:id', async (req, res) => {
   const { error } = await supabaseAdmin.from('invoices').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ ok: true });
 });
 
@@ -630,7 +631,7 @@ router.delete('/invoices/:id', async (req, res) => {
 router.post('/invoices/:id/send', async (req, res) => {
   const company = await loadCompany();
   const { data: row, error } = await supabaseAdmin.from('invoices').select('*').eq('id', req.params.id).maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   if (!row) return res.status(404).json({ error: 'Invoice not found' });
   const inv = toInvoice(row, company);
   const to = String((req.body && req.body.to) || inv.customer.email || '').trim();

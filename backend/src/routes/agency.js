@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const config = require('../config');
 const { requireAuth } = require('../middleware/auth');
@@ -56,7 +57,7 @@ router.get('/clients', requireAgency, async (req, res) => {
     ({ data: clients, error } = await runQuery(withoutEmail));
   }
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   // Usage per client
   const enriched = await Promise.all(
@@ -99,7 +100,7 @@ router.post('/clients', requireAgency, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   // Settings row for the new client
   await supabaseAdmin.from('settings').insert({ organization_id: data.id });
@@ -131,7 +132,7 @@ router.delete('/clients/:id', requireAgency, async (req, res) => {
   if (req.role !== 'admin') query = query.eq('parent_org_id', req.orgId);
 
   const { error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ ok: true });
 });
 
@@ -161,7 +162,7 @@ router.post('/clients/:id/invite', requireAgency, async (req, res) => {
     const result = await inviteClientUser(email.trim(), clientOrg);
     res.json(result);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: publicError(e) });
   }
 });
 

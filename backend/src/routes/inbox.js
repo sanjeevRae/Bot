@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const prefs = require('../services/channelPrefs');
@@ -40,7 +41,7 @@ router.get('/', async (req, res) => {
     .eq('handoff_requested', true)
     .order('created_at', { ascending: false });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const sessions = [...new Map((flagged || []).map((f) => [f.session_id, f])).values()];
 
@@ -95,7 +96,7 @@ router.patch('/:sessionId/resolve', async (req, res) => {
     .eq('session_id', req.params.sessionId)
     .eq('handoff_requested', true);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   try {
     await setBotPaused(req.orgId, req.params.sessionId, false);
   } catch (err) {
@@ -110,7 +111,7 @@ router.post('/:sessionId/takeover', async (req, res) => {
     await setBotPaused(req.orgId, req.params.sessionId, true);
     res.json({ ok: true, botPaused: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: publicError(err) });
   }
 });
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
     .order('booking_time', { ascending: false })
     .limit(200);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ bookings: data || [] });
 });
 
@@ -32,7 +33,7 @@ router.patch('/:id', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ booking: data });
 });
 

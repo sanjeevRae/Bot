@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const config = require('../config');
@@ -694,7 +695,7 @@ orgRouter.get('/status', requireAuth, async (req, res) => {
     .select('*')
     .eq('organization_id', req.orgId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   let live = null;
   if (conn?.openwa_session_id) {
@@ -840,7 +841,7 @@ orgRouter.post('/webhook/repair', requireAuth, async (req, res) => {
     .select('openwa_session_id')
     .eq('organization_id', req.orgId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   const sessionId = conn?.openwa_session_id || ''; // own connection only — a sessionId from the request body is never honoured (2026-11-23)
   if (!sessionId) return res.status(400).json({ error: 'No OpenWA session connected' });
 
@@ -889,7 +890,7 @@ orgRouter.post('/settings', requireAuth, async (req, res) => {
         error: 'Database is missing migration_v12_openwa_groups.sql — run it in the Supabase SQL editor.',
       });
     }
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: publicError(error) });
   }
 
   // A toggle must bite immediately, not when the mode cache expires.
@@ -922,7 +923,7 @@ orgRouter.get('/diagnostics', requireAuth, async (req, res) => {
     .select('*')
     .eq('organization_id', req.orgId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const sessionId = conn?.openwa_session_id || '';
   const out = {
@@ -953,7 +954,7 @@ orgRouter.get('/diagnostics', requireAuth, async (req, res) => {
         engineLoaded: live?.engineLoaded ?? null,
       };
     } catch (e) {
-      out.gatewaySession = { error: e.message };
+      out.gatewaySession = { error: publicError(e) };
     }
     try {
       const hooks = await openwa.listWebhooks(sessionId);
@@ -964,12 +965,12 @@ orgRouter.get('/diagnostics', requireAuth, async (req, res) => {
         url: h.url || null, events: h.events || null, active: h.active ?? null, filters: h.filters ?? null,
       }));
     } catch (e) {
-      out.webhooks = { error: e.message };
+      out.webhooks = { error: publicError(e) };
     }
     try {
       out.groups = await openwa.listGroups(sessionId);
     } catch (e) {
-      out.groups = { error: e.message };
+      out.groups = { error: publicError(e) };
     }
   }
 
@@ -991,7 +992,7 @@ orgRouter.post('/disconnect', requireAuth, async (req, res) => {
     .from('whatsapp_connections')
     .update({ status: 'disconnected', updated_at: new Date().toISOString() })
     .eq('organization_id', req.orgId);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   // The switch must bite on the next message, not when the mode cache expires.
   waMode.invalidate(conn?.openwa_session_id);
@@ -1010,7 +1011,7 @@ orgRouter.post('/reconnect', requireAuth, async (req, res) => {
     .select('*')
     .eq('organization_id', req.orgId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   if (!conn?.openwa_session_id) return res.status(400).json({ error: 'No OpenWA session connected' });
 
   // The webhook can only be verified against the URL this backend is reachable
@@ -1081,7 +1082,7 @@ orgRouter.post('/test', requireAuth, async (req, res) => {
     .select('*')
     .eq('organization_id', req.orgId)
     .maybeSingle();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   const sessionId = conn?.openwa_session_id || ''; // own connection only — a sessionId from the request body is never honoured (2026-11-23)
   if (!sessionId) return res.status(400).json({ error: 'No OpenWA session connected' });
 

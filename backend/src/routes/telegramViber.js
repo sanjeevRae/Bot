@@ -16,6 +16,7 @@
  */
 
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
@@ -254,12 +255,12 @@ async function saveBotToken(req, res, kind, apiFn, extraFields = {}) {
         ...extraFields(info, secret),
       })
       .eq('organization_id', req.orgId);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     require('../services/orgCache').invalidateOrgContext(req.orgId);
     res.json({ ok: true, webhookUrl, ...info });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 }
 
@@ -321,12 +322,12 @@ async function clearBotToken(req, res, kind, unregister) {
       .from('settings')
       .update({ channel_settings: stored, updated_at: new Date().toISOString(), ...cleared })
       .eq('organization_id', req.orgId);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     require('../services/orgCache').invalidateOrgContext(req.orgId);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: publicError(err) });
   }
 }
 

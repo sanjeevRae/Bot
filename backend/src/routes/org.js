@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const crypto = require('crypto');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth, requireOwner } = require('../middleware/auth');
@@ -83,7 +84,7 @@ router.patch('/settings', requireAuth, requireOwner, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   meCache.delete(req.orgId);
   invalidateOrgContext(req.orgId); // chat must pick up new bot name/greeting at once
   res.json({ settings: data });
@@ -96,7 +97,7 @@ router.get('/channels', requireAuth, async (req, res) => {
     .eq('organization_id', req.orgId)
     .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const storedPrefs = prefs.prefsOf(data);
   const hasTelegram = Boolean(prefs.orgBotToken(storedPrefs, 'telegram'));
@@ -145,7 +146,7 @@ router.post('/channels', requireAuth, requireOwner, async (req, res) => {
       .eq('organization_id', req.orgId)
       .select('whatsapp_number, whatsapp_phone_number_id, messenger_page_id')
       .single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     meCache.delete(req.orgId);
     invalidateOrgContext(req.orgId);
     return res.json({ ok: true, settings: data });
@@ -168,7 +169,7 @@ router.post('/channels', requireAuth, requireOwner, async (req, res) => {
       .eq('organization_id', req.orgId)
       .select('channel_settings')
       .single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     meCache.delete(req.orgId);
     invalidateOrgContext(req.orgId);
     return res.json({ ok: true, settings: data });
@@ -187,7 +188,7 @@ router.delete('/channels/:channel', requireAuth, requireOwner, async (req, res) 
       .from('settings')
       .update({ [col]: null, updated_at: new Date().toISOString() })
       .eq('organization_id', req.orgId);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     meCache.delete(req.orgId);
     invalidateOrgContext(req.orgId);
     return res.json({ ok: true });
@@ -208,7 +209,7 @@ router.delete('/channels/:channel', requireAuth, requireOwner, async (req, res) 
         .from('settings')
         .update({ channel_settings: stored, updated_at: new Date().toISOString() })
         .eq('organization_id', req.orgId);
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: publicError(error) });
       meCache.delete(req.orgId);
       invalidateOrgContext(req.orgId);
     }
@@ -325,13 +326,13 @@ router.patch('/channel-prefs', requireAuth, requireOwner, async (req, res) => {
       .from('settings')
       .update({ channel_settings: next, updated_at: new Date().toISOString() })
       .eq('organization_id', req.orgId);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     meCache.delete(req.orgId);
     invalidateOrgContext(req.orgId);
     res.json({ ok: true });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 /** PATCH /api/org/profile — update org profile */
@@ -347,7 +348,7 @@ router.patch('/profile', requireAuth, requireOwner, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   meCache.delete(req.orgId);
   res.json({ org: data });
 });
@@ -361,7 +362,7 @@ router.post('/api-key', requireAuth, requireOwner, async (req, res) => {
     .from('api_keys')
     .insert({ organization_id: req.orgId, key_hash: keyHash, label: 'widget' });
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ apiKey: rawKey }); // shown once; only hash stored
 });
 

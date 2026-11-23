@@ -1,4 +1,5 @@
 const express = require('express');
+const { publicError } = require('../lib/errors');
 const supabaseAdmin = require('../lib/supabase');
 const { requireAuth } = require('../middleware/auth');
 const { isPlanActive } = require('../services/quotas');
@@ -29,7 +30,7 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(50);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
 
   const { data: contacts } = await supabaseAdmin
     .from('channel_contacts')
@@ -98,11 +99,11 @@ router.post('/', async (req, res) => {
       })
       .select()
       .single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
 
     res.json({ ok: true, broadcast: data });
   } catch (err) {
-    res.status(err.status || 500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: publicError(err) });
   }
 });
 
@@ -134,11 +135,11 @@ router.patch('/:id', async (req, res) => {
       .select()
       .maybeSingle();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     if (!data) return res.status(404).json({ error: 'Broadcast not found (or already sending)' });
     res.json({ ok: true, broadcast: data });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: publicError(err) });
   }
 });
 
@@ -169,7 +170,7 @@ router.post('/sms', async (req, res) => {
     await supabaseAdmin.from('usage_events').insert({ organization_id: req.orgId, event_type: 'message' });
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(err.status || 502).json({ error: err.message });
+    res.status(err.status || 502).json({ error: publicError(err) });
   }
 });
 
@@ -185,10 +186,10 @@ router.patch('/contacts/:id', async (req, res) => {
       .update({ opt_in: req.body.opt_in })
       .eq('id', id)
       .eq('organization_id', req.orgId); // tenant guard
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: publicError(error) });
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: publicError(err) });
   }
 });
 
@@ -200,7 +201,7 @@ router.get('/contacts', async (req, res) => {
     .eq('organization_id', req.orgId)
     .order('last_inbound_at', { ascending: false })
     .limit(500);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) return res.status(500).json({ error: publicError(error) });
   res.json({ contacts: data || [] });
 });
 
