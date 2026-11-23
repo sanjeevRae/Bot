@@ -130,24 +130,62 @@ router.get('/widget.js', async (req, res) => {
   function saveS(s){ try { localStorage.setItem(SKEY, JSON.stringify({ id: s.sessionId, token: s.sessionToken, t: Date.now() })); } catch(e){} }
   function clearS(){ try { localStorage.removeItem(SKEY); } catch(e){} }
   var sess = loadS();
+
+  // ---- Turnstile (active only when the backend has a site key set) ----
+  var TS_KEY = ${JSON.stringify(process.env.TURNSTILE_SITE_KEY || '')};
+  var tsId = null, tsLoad = null, tsPending = null;
+  function tsToken(){
+    if (!TS_KEY) return Promise.resolve("");
+    if (!tsLoad) {
+      tsLoad = new Promise(function(resolve){
+        var sc = document.createElement("script");
+        sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+        sc.onload = function(){
+          try {
+            var holder = document.createElement("div");
+            holder.style.display = "none";
+            document.body.appendChild(holder);
+            tsId = window.turnstile.render(holder, { sitekey: TS_KEY, size: "invisible",
+              callback: function(tok){ window.__chitraTurnstileToken = tok; if (tsPending) { var p = tsPending; tsPending = null; p(tok); } },
+              "error-callback": function(){ if (tsPending) { var p = tsPending; tsPending = null; p(""); } } });
+          } catch(e) {}
+          resolve();
+        };
+        sc.onerror = function(){ resolve(); };
+        document.head.appendChild(sc);
+      });
+    }
+    return tsLoad.then(function(){
+      if (!window.turnstile || tsId === null) return "";
+      return new Promise(function(resolve){
+        var to = setTimeout(function(){ tsPending = null; resolve(""); }, 5000);
+        tsPending = function(tok){ clearTimeout(to); resolve(tok); };
+        try { window.turnstile.reset(tsId); window.turnstile.execute(tsId); }
+        catch(e) { clearTimeout(to); tsPending = null; resolve(""); }
+      });
+    });
+  }
   function ensureS(){
     if (sess) return Promise.resolve(sess);
-    return fetch(API + "/api/chat/session", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orgId: ORG_ID }) })
+    return tsToken().then(function(tok){
+      return fetch(API + "/api/chat/session", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId: ORG_ID, cfTurnstile: tok }) });
+    })
       .then(function(r){ if (!r.ok) throw new Error("session"); return r.json(); })
       .then(function(s){ sess = { id: s.sessionId, token: s.sessionToken }; saveS(s); return sess; });
   }
-  function sendMsg(text){
-    return ensureS().then(function(s){
+  function postChat(s, text){
+    // Fresh Turnstile token per attempt (tokens are single-use, 5-min lived).
+    return tsToken().then(function(tok){
       return fetch(API + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: ORG_ID, sessionId: s.id, sessionToken: s.token, message: text, cfTurnstile: (window.__chitraTurnstileToken || "") }) });
-    }).then(function(r){
+        body: JSON.stringify({ orgId: ORG_ID, sessionId: s.id, sessionToken: s.token, message: text, cfTurnstile: tok }) });
+    });
+  }
+  function sendMsg(text){
+    return ensureS().then(function(s){ return postChat(s, text); }).then(function(r){
       if (r.status === 403) { // revoked/unknown session - start fresh, once
         clearS(); sess = null;
-        return ensureS().then(function(s2){
-          return fetch(API + "/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orgId: ORG_ID, sessionId: s2.id, sessionToken: s2.token, message: text, cfTurnstile: (window.__chitraTurnstileToken || "") }) });
-        });
+        return ensureS().then(function(s2){ return postChat(s2, text); });
       }
       return r;
     }).then(function(r){ return r.json(); });
@@ -376,18 +414,43 @@ if(s&&s.id&&s.token&&s.t&&(Date.now()-s.t)<86400000)return s;}catch(e){}return n
 function saveS(s){try{localStorage.setItem(SKEY,JSON.stringify({id:s.sessionId,token:s.sessionToken,t:Date.now()}));}catch(e){}}
 function clearS(){try{localStorage.removeItem(SKEY);}catch(e){}}
 var sess=loadS();
+
+var TS_KEY=${JSON.stringify(process.env.TURNSTILE_SITE_KEY || '')};
+var tsId=null,tsLoad=null,tsPending=null;
+function tsToken(){
+if(!TS_KEY)return Promise.resolve("");
+if(!tsLoad){tsLoad=new Promise(function(resolve){
+var sc=document.createElement("script");
+sc.src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+sc.onload=function(){try{
+var holder=document.createElement("div");holder.style.display="none";document.body.appendChild(holder);
+tsId=window.turnstile.render(holder,{sitekey:TS_KEY,size:"invisible",
+callback:function(tok){window.__chitraTurnstileToken=tok;if(tsPending){var p=tsPending;tsPending=null;p(tok);}},
+"error-callback":function(){if(tsPending){var p=tsPending;tsPending=null;p("");}}});
+}catch(e){}resolve();};
+sc.onerror=function(){resolve();};
+document.head.appendChild(sc);});}
+return tsLoad.then(function(){
+if(!window.turnstile||tsId===null)return "";
+return new Promise(function(resolve){
+var to=setTimeout(function(){tsPending=null;resolve("");},5000);
+tsPending=function(tok){clearTimeout(to);resolve(tok);};
+try{window.turnstile.reset(tsId);window.turnstile.execute(tsId);}
+catch(e){clearTimeout(to);tsPending=null;resolve("");}
+});});
+}
 function ensureS(){if(sess)return Promise.resolve(sess);
+return tsToken().then(function(tok){
 return fetch("${backendUrl}/api/chat/session",{method:"POST",headers:{"Content-Type":"application/json"},
-body:JSON.stringify({orgId:"${orgId}"})})
+body:JSON.stringify({orgId:"${orgId}",cfTurnstile:tok})});})
 .then(function(r){if(!r.ok)throw new Error("session");return r.json()})
 .then(function(s){sess={id:s.sessionId,token:s.sessionToken};saveS(s);return sess;});}
-function sendMsg(text){return ensureS().then(function(s){
+function postChat(s,text){return tsToken().then(function(tok){
 return fetch("${backendUrl}/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
-body:JSON.stringify({orgId:"${orgId}",sessionId:s.id,sessionToken:s.token,message:text})});
-}).then(function(r){if(r.status===403){clearS();sess=null;
-return ensureS().then(function(s2){
-return fetch("${backendUrl}/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},
-body:JSON.stringify({orgId:"${orgId}",sessionId:s2.id,sessionToken:s2.token,message:text})});});}
+body:JSON.stringify({orgId:"${orgId}",sessionId:s.id,sessionToken:s.token,message:text,cfTurnstile:tok})});});}
+function sendMsg(text){return ensureS().then(function(s){return postChat(s,text);})
+.then(function(r){if(r.status===403){clearS();sess=null;
+return ensureS().then(function(s2){return postChat(s2,text);});}
 return r;}).then(function(r){return r.json();});}
 var BRAND = ${JSON.stringify(brandColor)};
   /* Markdown renderer v2 — headings, bold/italic, inline code, code blocks,

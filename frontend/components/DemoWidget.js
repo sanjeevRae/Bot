@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { fetchApi } from '../lib/supabaseClient';
+import { getTurnstileToken } from '../lib/turnstile';
 
 /**
  * Floating chat widget for the Chitra AI landing page.
@@ -25,7 +26,7 @@ export default function DemoWidget({ orgId }) {
     const res = await fetchApi('/api/chat/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orgId }),
+      body: JSON.stringify({ orgId, cfTurnstile: await getTurnstileToken() }),
     });
     if (!res.ok) throw new Error('session');
     const s = await res.json();
@@ -45,7 +46,7 @@ export default function DemoWidget({ orgId }) {
       let res = await fetchApi('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
+        body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text, cfTurnstile: await getTurnstileToken() }),
       });
       if (res.status === 403) {
         sessRef.current = null;
@@ -53,7 +54,7 @@ export default function DemoWidget({ orgId }) {
         res = await fetchApi('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text }),
+          body: JSON.stringify({ orgId, sessionId: s.id, sessionToken: s.token, message: text, cfTurnstile: await getTurnstileToken() }),
         });
       }
       const data = await res.json();

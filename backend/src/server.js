@@ -4,7 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const fileUpload = require('express-fileupload');
 const config = require('./config');
-const { apiLimiter, chatLimiter } = require('./middleware/rateLimit');
+const { apiLimiter, ingestLimiter, chatLimiter } = require('./middleware/rateLimit');
 const { verifyTurnstile } = require('./middleware/turnstile');
 const { startKeepAlive } = require('./services/keepAlive');
 
@@ -89,16 +89,21 @@ app.get('/health', (req, res) => res.json({ ok: true, service: 'chitra-ai-backen
 
 // Public chat endpoint — captcha-protected when Turnstile is configured
 app.use('/api/chat', chatLimiter, verifyTurnstile, require('./routes/chat'));
+// Rate limiting (2026-11-23): the global limiter now actually mounts (it was
+// imported but never applied). Billing is intentionally excluded — the
+// payment project owns that surface. Webhooks are signature-protected.
+app.use('/api/knowledge', apiLimiter);
+app.use(['/api/knowledge/crawl', '/api/knowledge/upload', '/api/knowledge/refresh', '/api/knowledge/youtube', '/api/knowledge/drive', '/api/knowledge/notion', '/api/knowledge/text', '/api/knowledge/structured'], ingestLimiter);
 app.use('/api/knowledge', require('./routes/knowledge'));
-app.use('/api/bookings', require('./routes/bookings'));
-app.use('/api/leads', require('./routes/leads'));
-app.use('/api/analytics', require('./routes/analytics'));
-app.use('/api/org', require('./routes/org'));
+app.use('/api/bookings', apiLimiter, require('./routes/bookings'));
+app.use('/api/leads', apiLimiter, require('./routes/leads'));
+app.use('/api/analytics', apiLimiter, require('./routes/analytics'));
+app.use('/api/org', apiLimiter, require('./routes/org'));
 app.use('/api/channels', require('./routes/channels'));
 // OpenWA (self-hosted gateway): signed webhook + org-scoped management endpoints
 const { webhookRouter, orgRouter } = require('./routes/openwa');
 app.use('/api/webhooks', webhookRouter);
-app.use('/api/org/openwa', orgRouter);
+app.use('/api/org/openwa', apiLimiter, orgRouter);
 // V13 Muse event hook: cheap public pending-message feed for WhatsApp (OpenWA).
 // Mounted with and without the /api prefix so Muse can point at the base URL.
 const waPendingRoutes = require('./routes/waPending');
@@ -107,13 +112,13 @@ app.use('/api/wa-pending', waPendingRoutes);
 // Telegram + Viber (V11): provider webhooks + per-org bot token management
 const { webhookRouter: botWebhooks, orgRouter: botOrg } = require('./routes/telegramViber');
 app.use('/api/webhooks', botWebhooks);
-app.use('/api/org/bots', botOrg);
-app.use('/api/inbox', require('./routes/inbox'));
-app.use('/api/broadcasts', require('./routes/broadcasts'));
+app.use('/api/org/bots', apiLimiter, botOrg);
+app.use('/api/inbox', apiLimiter, require('./routes/inbox'));
+app.use('/api/broadcasts', apiLimiter, require('./routes/broadcasts'));
 const { startBroadcastSweeper } = require('./services/broadcasts');
 app.use('/api/billing', require('./routes/billing'));
-app.use('/api/agency', require('./routes/agency'));
-app.use('/api/admin', require('./routes/admin'));
+app.use('/api/agency', apiLimiter, require('./routes/agency'));
+app.use('/api/admin', apiLimiter, require('./routes/admin'));
 
 // Widget loader + hosted bot page (public)
 app.use('/', require('./routes/widget'));
