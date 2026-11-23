@@ -134,7 +134,7 @@ router.get('/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
-  if (mode === 'subscribe' && token === config.meta.verifyToken) {
+  if (mode === 'subscribe' && config.meta.verifyToken && token === config.meta.verifyToken) {
     return res.status(200).send(challenge);
   }
   res.sendStatus(403);
@@ -143,12 +143,48 @@ router.get('/webhook', (req, res) => {
 // ============================================================
 // POST /api/channels/webhook — inbound messages (WA + Messenger + IG)
 // ============================================================
+let metaDisabledWarnedAt = 0;
+
 router.post('/webhook', async (req, res) => {
+  // --- Signature gate (2026-11-23 emergency containment) -------------------
+  // Before this change the POST webhook processed unsigned requests: anyone
+  // who knew a business's phone_number_id / page id could forge inbound
+  // customer messages (quota burn, fake leads/bookings, bot sends). Now:
+  //   - META_APP_SECRET unset  -> inbound processing is DISABLED (503, fail
+  //     closed). The verify token is NOT a substitute for the app secret.
+  //   - Signature missing/bad  -> 401, nothing is processed.
+  //   - Signature valid        -> the original flow below runs unchanged.
+  // Full Meta channel security is a separate project; this gate is the
+  // minimal containment. To re-enable Meta channels: set META_APP_SECRET in
+  // the backend environment (Meta App Dashboard -> Settings -> Basic).
+  if (!config.meta.appSecret) {
+    if (Date.now() - metaDisabledWarnedAt > 60_000) {
+      metaDisabledWarnedAt = Date.now();
+      console.warn('[meta-webhook] inbound processing disabled: META_APP_SECRET is not configured');
+    }
+    return res.status(503).json({ error: 'Meta webhook is not configured' });
+  }
+  const signature = String(req.headers['x-hub-signature-256'] || '');
+  const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+  const expectedSig =
+    'sha256=' + crypto.createHmac('sha256', config.meta.appSecret).update(rawBody).digest('hex');
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  let parsedBody;
+  try {
+    parsedBody = JSON.parse(rawBody.toString('utf8'));
+  } catch {
+    return res.status(400).json({ error: 'Invalid JSON' });
+  }
+
   // Respond immediately; process async (Meta retries on timeout)
   res.sendStatus(200);
 
   try {
-    const body = req.body;
+    const body = parsedBody;
     if (body.object !== 'whatsapp_business_account' && body.object !== 'page') return;
 
     for (const entry of body.entry || []) {

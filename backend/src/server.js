@@ -22,6 +22,7 @@ app.use(helmet());
 app.use('/api/webhooks/openwa', express.raw({ type: '*/*', limit: '2mb' }));
 // Viber signs deliveries the same way (HMAC over the raw body).
 app.use('/api/webhooks/viber', express.raw({ type: '*/*', limit: '2mb' }));
+app.use('/api/channels/webhook', express.raw({ type: '*/*', limit: '2mb' }));
 app.use(express.json({ limit: '2mb' }));
 app.use(fileUpload({ limits: { fileSize: 6 * 1024 * 1024 } }));
 
@@ -72,7 +73,8 @@ app.use('/bot', publicCors);
 app.use('/api/channels/webhook', publicCors);
 // V11 provider webhooks are public too (Telegram & Viber must reach them).
 app.use('/api/webhooks', publicCors);
-// Muse's OpenWA event hook polls the pending feed (counts + chat ids only).
+// Muse's OpenWA event hook polls the pending feed (token-protected since the
+// 2026-11-23 hardening — see routes/waPending.js; CORS stays public, auth is the header).
 app.use('/wa-pending', publicCors);
 app.use('/api/wa-pending', publicCors);
 app.use('/widget.js', helmetPublic);

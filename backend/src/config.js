@@ -31,6 +31,11 @@ const config = {
   meta: {
     apiVersion: process.env.META_GRAPH_VERSION || 'v20.0',
     verifyToken: process.env.META_VERIFY_TOKEN || '', // no hardcoded fallback: empty = handshake fails closed
+    // App secret used to verify X-Hub-Signature-256 on inbound webhook POSTs.
+    // When empty, the Meta webhook refuses to process inbound messages
+    // (fail closed) — see routes/channels.js. Full Meta channel work is a
+    // separate project; this is emergency containment (2026-11-23).
+    appSecret: process.env.META_APP_SECRET || '',
   },
   whatsapp: {
     // WhatsApp Cloud API — one business phone number per deployment

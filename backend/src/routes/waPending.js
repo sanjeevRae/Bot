@@ -48,22 +48,40 @@ const waPending = require('../lib/waPending');
  * silently.
  */
 
+const crypto = require('crypto');
+
 const router = express.Router();
 
+/**
+ * Authentication (2026-11-23 hardening — this feed was previously PUBLIC in
+ * production: counts, chat ids, session ids, gateway readiness and, when
+ * stored, message bodies were served to anyone; production had no token set).
+ *
+ * Now the ENTIRE response is protected:
+ *   - `WA_PENDING_TOKEN` must be set on the server. When it is missing the
+ *     feed is DISABLED (503) — fail closed, never fail open.
+ *   - Callers must present the token in the `x-wa-token` header. Query-string
+ *     tokens are NOT accepted (they leak into logs and proxies).
+ *   - The comparison is timing-safe, and the token is never logged.
+ *
+ * Deployment note: setting WA_PENDING_TOKEN in the backend environment is
+ * REQUIRED for Muse's WhatsApp wake-up hook to keep working, and the hook
+ * must be updated to send the `x-wa-token` header. Until then this endpoint
+ * returns 503/401 and no pending data is exposed.
+ */
 router.get('/', async (req, res) => {
-  const snap = await waPending.snapshot();
-  // Never cache: a stale copy would hide the very wake-up signal this exists for.
   res.set('Cache-Control', 'no-store, max-age=0');
-  // The detail array names who said what: serve it only to a caller holding the
-  // optional shared secret, when one is configured.
   const token = String(process.env.WA_PENDING_TOKEN || '').trim();
-  if (token) {
-    const presented = String(req.query?.token || req.headers['x-wa-token'] || '').trim();
-    if (presented !== token) {
-      const { pending, ...rest } = snap;
-      return res.json(rest);
-    }
+  if (!token) {
+    return res.status(503).json({ error: 'Pending feed is not configured' });
   }
+  const presented = String(req.headers['x-wa-token'] || '');
+  const a = Buffer.from(presented);
+  const b = Buffer.from(token);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const snap = await waPending.snapshot();
   res.json(snap);
 });
 
