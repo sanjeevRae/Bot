@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { api, fetchApi, getManagingOrg, setManagingOrg } from '../lib/supabaseClient';
+import { getTurnstileToken } from '../lib/turnstile';
 
 /**
  * Minimal markdown → JSX renderer for bot replies.
